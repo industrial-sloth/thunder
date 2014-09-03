@@ -194,12 +194,18 @@ def subtoind(data, dims):
 def indtosub(data, dims, order='F', one_based=True):
     """Convert linear indexing to subscript indexing
     :param order: 'C' or 'F', for row-major or column-major array indexing. See numpy.unravel_index.
+    :param one_based: True if generated subscript indices are to start at 1, False to start at 0
     """
     if not order in ('C', 'F'):
         raise TypeError("Order %s not understood, should be 'C' or 'F'.")
 
-    def indtosub_inline(k, dimprod):
+    def indtosub_inline_onebased(k, dimprod):
         return tuple(map(lambda (x, y): int(mod(ceil(float(k)/y) - 1, x) + 1), dimprod))
+
+    def indtosub_inline_zerobased(k, dimprod):
+        return tuple(map(lambda (x, y): int(mod(ceil(float(k+1)/y) - 1, x)), dimprod))
+
+    inline_fcn = indtosub_inline_onebased if one_based else indtosub_inline_zerobased
 
     if size(dims) > 1:
         if order == 'F':
@@ -208,8 +214,8 @@ def indtosub(data, dims, order='F', one_based=True):
             dimprod = zip(dims, append(1, cumprod(dims[::-1])[0:-1])[::-1])
 
         if isrdd(data):
-            return data.map(lambda (k, v): (indtosub_inline(k, dimprod), v))
+            return data.map(lambda (k, v): (inline_fcn(k, dimprod), v))
         else:
-            return map(lambda (k, v): (indtosub_inline(k, dimprod), v), data)
+            return map(lambda (k, v): (inline_fcn(k, dimprod), v), data)
     else:
         return data
