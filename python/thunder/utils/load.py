@@ -4,8 +4,7 @@ Utilities for loading and preprocessing data
 
 import pyspark
 from numpy import array, mean, cumprod, append, mod, ceil, size, \
-    polyfit, polyval, arange, percentile, inf, subtract, \
-    asarray, prod, unravel_index, ravel_multi_index
+    polyfit, polyval, arange, percentile, inf, subtract
 from scipy.signal import butter, lfilter
 
 
@@ -203,18 +202,14 @@ def indtosub(data, dims, order='F'):
         return tuple(map(lambda (x, y): int(mod(ceil(float(k)/y) - 1, x) + 1), dimprod))
 
     if size(dims) > 1:
-        dimprod = zip(dims, append(1, cumprod(dims)[0:-1]))
+        if order == 'F':
+            dimprod = zip(dims, append(1, cumprod(dims)[0:-1]))
+        else:
+            dimprod = zip(dims, append(1, cumprod(dims[::-1])[0:-1])[::-1])
+
         if isrdd(data):
             return data.map(lambda (k, v): (indtosub_inline(k, dimprod), v))
         else:
-            # return map(lambda (k, v): (indtosub_inline(k, dimprod), v), data)
-            keys, vals = zip(*data)
-            # handle wrapping of linear indices:
-            keys = mod(asarray(keys)-1, prod(dims))
-            unraveled = unravel_index(asarray(keys), dims, order=order)
-            # add one back to all indices:
-            unraveled = [idx+1 for idx in unraveled]
-            return tuple(zip(zip(*unraveled), vals))
-
+            return map(lambda (k, v): (indtosub_inline(k, dimprod), v), data)
     else:
         return data
