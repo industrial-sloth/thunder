@@ -81,28 +81,28 @@ def test_subtoind_parameterized():
 
 
 def test_indtosub_parameterized():
-    IndToSubParameters = namedtuple('IndToSubParameters', ['indices', 'dims', 'subscripts', 'order'])
-    parameters = [IndToSubParameters(range(1, 13), dims=(2, 3, 2), order='F',
+    IndToSubParameters = namedtuple('IndToSubParameters', ['indices', 'dims', 'subscripts', 'order', 'one_based'])
+    parameters = [IndToSubParameters(range(1, 13), dims=(2, 3, 2), order='F', one_based=True,
                                      subscripts=[(1, 1, 1), (2, 1, 1), (1, 2, 1), (2, 2, 1), (1, 3, 1), (2, 3, 1),
                                                  (1, 1, 2), (2, 1, 2), (1, 2, 2), (2, 2, 2), (1, 3, 2), (2, 3, 2)]),
                   # indicies out of range are wrapped back into range with >1 dimension:
-                  IndToSubParameters([-1, 0, 1, 2, 3], dims=(1, 2), order='F',
+                  IndToSubParameters([-1, 0, 1, 2, 3], dims=(1, 2), order='F', one_based=True,
                                      subscripts=[(1, 1), (1, 2), (1, 1), (1, 2), (1, 1)]),
-                  IndToSubParameters([-1, 0, 1, 2, 3], dims=(1, 2), order='C',
+                  IndToSubParameters([-1, 0, 1, 2, 3], dims=(1, 2), order='C', one_based=True,
                                      subscripts=[(1, 1), (1, 2), (1, 1), (1, 2), (1, 1)]),
                   # note with only one dimension, we no longer wrap, and no longer return tuples:
-                  IndToSubParameters([-1, 0, 1, 2, 3], dims=(1,), order='F',
+                  IndToSubParameters([-1, 0, 1, 2, 3], dims=(1,), order='F', one_based=True,
                                      subscripts=[-1, 0, 1, 2, 3]),
-                  IndToSubParameters([-1, 0, 1, 2, 3], dims=(1,), order='C',
+                  IndToSubParameters([-1, 0, 1, 2, 3], dims=(1,), order='C', one_based=True,
                                      subscripts=[-1, 0, 1, 2, 3]),
-                  IndToSubParameters(range(1, 6), dims=(2, 3), order='F',
+                  IndToSubParameters(range(1, 6), dims=(2, 3), order='F', one_based=True,
                                      subscripts=[(1, 1), (2, 1), (1, 2), (2, 2), (1, 3), (2, 3)]),
-                  IndToSubParameters(range(1, 6), dims=(2, 3), order='C',
+                  IndToSubParameters(range(1, 6), dims=(2, 3), order='C', one_based=True,
                                      subscripts=[(1, 1), (1, 2), (1, 3), (2, 1), (2, 2), (2, 3)]),
-                  IndToSubParameters(range(1, 13), dims=(2, 3, 4), order='F',
+                  IndToSubParameters(range(1, 13), dims=(2, 3, 4), order='F', one_based=True,
                                      subscripts=[(1, 1, 1), (2, 1, 1), (1, 2, 1), (2, 2, 1), (1, 3, 1), (2, 3, 1),
                                                  (1, 1, 2), (2, 1, 2), (1, 2, 2), (2, 2, 2), (1, 3, 2), (2, 3, 2)]),
-                  IndToSubParameters(range(1, 13), dims=(2, 3, 4), order='C',
+                  IndToSubParameters(range(1, 13), dims=(2, 3, 4), order='C', one_based=True,
                                      subscripts=[(1, 1, 1), (1, 1, 2), (1, 1, 3), (1, 1, 4),
                                                  (1, 2, 1), (1, 2, 2), (1, 2, 3), (1, 2, 4),
                                                  (1, 3, 1), (1, 3, 2), (1, 3, 3), (1, 3, 4)]),
@@ -111,7 +111,7 @@ def test_indtosub_parameterized():
     def check_indtosub_result(indsub_param):
         # attach dummy value 'x' to indicies to match expected input to indtosub
         data = map(lambda d: (d, 'x'), indsub_param.indices)
-        results = indtosub(data, indsub_param.dims, order=indsub_param.order)
+        results = indtosub(data, indsub_param.dims, order=indsub_param.order, one_based=indsub_param.one_based)
         for res, expected, index in zip(results, indsub_param.subscripts, indsub_param.indices):
             assert_equals(expected, res[0], 'Got subscript %s instead of %s for index:%d, dims:%s' %
                           (res[0], expected, index, str(indsub_param.dims)))

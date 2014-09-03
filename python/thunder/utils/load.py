@@ -191,7 +191,7 @@ def subtoind(data, dims):
             return map(lambda (k, v): (k[0], v), data)
 
 
-def indtosub(data, dims, order='F'):
+def indtosub(data, dims, order='F', one_based=True):
     """Convert linear indexing to subscript indexing
     :param order: 'C' or 'F', for row-major or column-major array indexing. See numpy.unravel_index.
     """
