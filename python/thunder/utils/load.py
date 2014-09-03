@@ -4,7 +4,8 @@ Utilities for loading and preprocessing data
 
 import pyspark
 from numpy import array, mean, cumprod, append, mod, ceil, size, \
-    polyfit, polyval, arange, percentile, inf, subtract
+    polyfit, polyval, arange, percentile, inf, subtract, \
+    asarray, prod, unravel_index, ravel_multi_index
 from scipy.signal import butter, lfilter
 
 
@@ -191,8 +192,12 @@ def subtoind(data, dims):
             return map(lambda (k, v): (k[0], v), data)
 
 
-def indtosub(data, dims):
-    """Convert linear indexing to subscript indexing"""
+def indtosub(data, dims, order='F'):
+    """Convert linear indexing to subscript indexing
+    :param order: 'C' or 'F', for row-major or column-major array indexing. See numpy.unravel_index.
+    """
+    if not order in ('C', 'F'):
+        raise TypeError("Order %s not understood, should be 'C' or 'F'.")
 
     def indtosub_inline(k, dimprod):
         return tuple(map(lambda (x, y): int(mod(ceil(float(k)/y) - 1, x) + 1), dimprod))
@@ -202,7 +207,14 @@ def indtosub(data, dims):
         if isrdd(data):
             return data.map(lambda (k, v): (indtosub_inline(k, dimprod), v))
         else:
-            return map(lambda (k, v): (indtosub_inline(k, dimprod), v), data)
+            # return map(lambda (k, v): (indtosub_inline(k, dimprod), v), data)
+            keys, vals = zip(*data)
+            # handle wrapping of linear indices:
+            keys = mod(asarray(keys)-1, prod(dims))
+            unraveled = unravel_index(asarray(keys), dims, order=order)
+            # add one back to all indices:
+            unraveled = [idx+1 for idx in unraveled]
+            return tuple(zip(zip(*unraveled), vals))
 
     else:
         return data
