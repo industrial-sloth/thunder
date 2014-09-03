@@ -185,7 +185,10 @@ def subtoind(data, dims):
         else:
             return map(lambda (k, v): (subtoind_inline(k, dimprod), v), data)
     else:
-        return data.map(lambda (k, v): (k[0], v))
+        if isrdd(data):
+            return data.map(lambda (k, v): (k[0], v))
+        else:
+            return map(lambda (k, v): (k[0], v), data)
 
 
 def indtosub(data, dims):
