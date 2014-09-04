@@ -179,17 +179,26 @@ def _check_order(order):
         raise TypeError("Order %s not understood, should be 'C' or 'F'.")
 
 
-def subtoind(data, dims, order='F'):
+def subtoind(data, dims, order='F', one_based=True):
     """Convert subscript indexing to linear indexing
     :param order: 'C' or 'F', for row-major or column-major array indexing. See numpy.ravel_multi_index.
+    :param one_based: True if generated subscript indices are to start at 1, False to start at 0
     """
     _check_order(order)
 
-    def subtoind_inline_colmajor(k, dimprod):
-        return sum(map(lambda (x, y): (x - 1) * y, zip(k[1:], dimprod))) + k[0]
+    def onebased_prod(x_y):
+        x, y = x_y
+        return (x - 1) * y
 
-    def subtoind_inline_rowmajor(k, revdimprod):
-        return sum(map(lambda (x, y): (x - 1) * y, zip(k[:-1], revdimprod))) + k[-1]
+    def zerobased_prod(x_y):
+        x, y = x_y
+        return x * y
+
+    def subtoind_inline_colmajor(k, dimprod, p_func):
+        return sum(map(p_func, zip(k[1:], dimprod))) + k[0]
+
+    def subtoind_inline_rowmajor(k, revdimprod, p_func):
+        return sum(map(p_func, zip(k[:-1], revdimprod))) + k[-1]
 
     if size(dims) > 1:
         if order == 'F':
@@ -199,10 +208,12 @@ def subtoind(data, dims, order='F'):
             dimprod = cumprod(dims[::-1])[0:-1][::-1]
             inline_fcn = subtoind_inline_rowmajor
 
+        prod_fcn = onebased_prod if one_based else zerobased_prod
+
         if isrdd(data):
-            return data.map(lambda (k, v): (inline_fcn(k, dimprod), v))
+            return data.map(lambda (k, v): (inline_fcn(k, dimprod, prod_fcn), v))
         else:
-            return map(lambda (k, v): (inline_fcn(k, dimprod), v), data)
+            return map(lambda (k, v): (inline_fcn(k, dimprod, prod_fcn), v), data)
 
     else:
         if isrdd(data):

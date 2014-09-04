@@ -56,29 +56,46 @@ class TestSubToInd(LoadTestCase):
 
 
 def test_subtoind_parameterized():
-    SubToIndParameters = namedtuple('SubToIndParameters', ['subscripts', 'dims', 'indices', 'order'])
+    SubToIndParameters = namedtuple('SubToIndParameters', ['subscripts', 'dims', 'indices', 'order', 'one_based'])
     parameters = [SubToIndParameters([(1, 1, 1), (2, 1, 1), (1, 2, 1), (2, 2, 1), (1, 3, 1), (2, 3, 1),
                                       (1, 1, 2), (2, 1, 2), (1, 2, 2), (2, 2, 2), (1, 3, 2), (2, 3, 2)],
-                                     dims=(2, 3, 2), indices=range(1, 13), order='F'),
-                  # SubToIndParameters([(0, 1, 1)], dims=(2, 3, 2), indices=[0], order='F'),
-                  # SubToIndParameters([(-1, 1), (0, 1), (1, 1), (2, 1), (3, 1)], dims=(2, 1),
-                  #                    indices=[-1, 0, 1, 2, 3], order='F'),
+                                     dims=(2, 3, 2), indices=range(1, 13), order='F', one_based=True,),
+                  SubToIndParameters([(0, 1, 1)], dims=(2, 3, 2), indices=[0], order='F', one_based=True,),
+                  SubToIndParameters([(-1, 1), (0, 1), (1, 1), (2, 1), (3, 1)], dims=(2, 1),
+                                     indices=[-1, 0, 1, 2, 3], order='F', one_based=True,),
                   SubToIndParameters([(-1,), (0,), (1,), (2,), (3,)], dims=(1,),
-                                     indices=[-1, 0, 1, 2, 3], order='F'),
+                                     indices=[-1, 0, 1, 2, 3], order='F', one_based=True,),
                   SubToIndParameters([(1, 1, 1), (1, 1, 2), (1, 2, 1), (1, 2, 2), (1, 3, 1), (1, 3, 2),
                                       (2, 1, 1), (2, 1, 2), (2, 2, 1), (2, 2, 2), (2, 3, 1), (2, 3, 2)],
-                                     dims=(2, 3, 2), indices=range(1, 13), order='C'),
-                  # SubToIndParameters([(1, 1, 0)], dims=(2, 3, 2), indices=[0], order='C'),
-                  # SubToIndParameters([(1, -1), (1, 0), (1, 1), (1, 2), (1, 3)], dims=(2, 1),
-                  #                    indices=[-1, 0, 1, 2, 3], order='C'),
+                                     dims=(2, 3, 2), indices=range(1, 13), order='C', one_based=True,),
+                  SubToIndParameters([(1, 1, 0)], dims=(2, 3, 2), indices=[0], order='C', one_based=True,),
+                  SubToIndParameters([(1, -1), (1, 0), (1, 1), (1, 2), (1, 3)], dims=(2, 1),
+                                     indices=[-1, 0, 1, 2, 3], order='C', one_based=True,),
                   SubToIndParameters([(-1,), (0,), (1,), (2,), (3,)], dims=(1,),
-                                     indices=[-1, 0, 1, 2, 3], order='C')
+                                     indices=[-1, 0, 1, 2, 3], order='C', one_based=True,),
+
+                  SubToIndParameters([(0, 0, 0), (1, 0, 0), (0, 1, 0), (1, 1, 0), (0, 2, 0), (1, 2, 0),
+                                      (0, 0, 1), (1, 0, 1), (0, 1, 1), (1, 1, 1), (0, 2, 1), (1, 2, 1)],
+                                     dims=(2, 3, 2), indices=range(12), order='F', one_based=False,),
+                  SubToIndParameters([(-1, 0, 0)], dims=(2, 3, 2), indices=[-1], order='F', one_based=False,),
+                  SubToIndParameters([(-2, 0), (-1, 0), (0, 0), (1, 0), (2, 0)], dims=(2, 1),
+                                     indices=[-2, -1, 0, 1, 2], order='F', one_based=False,),
+                  SubToIndParameters([(-2,), (-1,), (0,), (1,), (2,)], dims=(1,),
+                                     indices=[-2, -1, 0, 1, 2], order='F', one_based=False,),
+                  SubToIndParameters([(0, 0, 0), (0, 0, 1), (0, 1, 0), (0, 1, 1), (0, 2, 0), (0, 2, 1),
+                                      (1, 0, 0), (1, 0, 1), (1, 1, 0), (1, 1, 1), (1, 2, 0), (1, 2, 1)],
+                                     dims=(2, 3, 2), indices=range(12), order='C', one_based=False,),
+                  SubToIndParameters([(0, 0, -1)], dims=(2, 3, 2), indices=[-1], order='C', one_based=False,),
+                  SubToIndParameters([(0, -2), (0, -1), (0, 0), (0, 1), (0, 2)], dims=(2, 1),
+                                     indices=[-2, -1, 0, 1, 2], order='C', one_based=False,),
+                  SubToIndParameters([(-2,), (-1,), (0,), (1,), (2,)], dims=(1,),
+                                     indices=[-2, -1, 0, 1, 2], order='C', one_based=False,)
                   ]
 
     def check_subtoind_result(si_param):
         # attach dummy value 'x' to subscripts to match expected input to subtoind
         data = map(lambda d: (d, 'x'), si_param.subscripts)
-        results = subtoind(data, si_param.dims, order=si_param.order)
+        results = subtoind(data, si_param.dims, order=si_param.order, one_based=si_param.one_based)
         # check results individually to highlight specific failures
         for res, expected, subscript in zip(results, si_param.indices, si_param.subscripts):
             assert_equals(expected, res[0], 'Got index %d instead of %d for subscript:%s, dims:%s' %
