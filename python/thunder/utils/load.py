@@ -185,19 +185,24 @@ def subtoind(data, dims, order='F'):
     """
     _check_order(order)
 
-    def subtoind_inline(k, dimprod):
+    def subtoind_inline_colmajor(k, dimprod):
         return sum(map(lambda (x, y): (x - 1) * y, zip(k[1:], dimprod))) + k[0]
+
+    def subtoind_inline_rowmajor(k, revdimprod):
+        return sum(map(lambda (x, y): (x - 1) * y, zip(k[:-1], revdimprod))) + k[-1]
+
     if size(dims) > 1:
-        dimprod = cumprod(dims)[0:-1]
-        if isrdd(data):
-            return data.map(lambda (k, v): (subtoind_inline(k, dimprod), v))
+        if order == 'F':
+            dimprod = cumprod(dims)[0:-1]
+            inline_fcn = subtoind_inline_colmajor
         else:
-            # return map(lambda (k, v): (subtoind_inline(k, dimprod), v), data)
-            keys, vals = zip(*data)
-            key_arys = asarray(zip(*keys)) - 1
-            # print key_arys
-            raveled = ravel_multi_index(key_arys, dims, order=order, mode='wrap') + 1
-            return zip(raveled, vals)
+            dimprod = cumprod(dims[::-1])[0:-1][::-1]
+            inline_fcn = subtoind_inline_rowmajor
+
+        if isrdd(data):
+            return data.map(lambda (k, v): (inline_fcn(k, dimprod), v))
+        else:
+            return map(lambda (k, v): (inline_fcn(k, dimprod), v), data)
 
     else:
         if isrdd(data):
