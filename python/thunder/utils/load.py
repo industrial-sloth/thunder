@@ -174,8 +174,16 @@ def getdims(data):
     return d
 
 
-def subtoind(data, dims):
-    """Convert subscript indexing to linear indexing"""
+def _check_order(order):
+    if not order in ('C', 'F'):
+        raise TypeError("Order %s not understood, should be 'C' or 'F'.")
+
+
+def subtoind(data, dims, order='F'):
+    """Convert subscript indexing to linear indexing
+    :param order: 'C' or 'F', for row-major or column-major array indexing. See numpy.ravel_multi_index.
+    """
+    _check_order(order)
 
     def subtoind_inline(k, dimprod):
         return sum(map(lambda (x, y): (x - 1) * y, zip(k[1:], dimprod))) + k[0]
@@ -188,7 +196,7 @@ def subtoind(data, dims):
             keys, vals = zip(*data)
             key_arys = asarray(zip(*keys)) - 1
             # print key_arys
-            raveled = ravel_multi_index(key_arys, dims, order='F', mode='wrap') + 1
+            raveled = ravel_multi_index(key_arys, dims, order=order, mode='wrap') + 1
             return zip(raveled, vals)
 
     else:
@@ -203,8 +211,7 @@ def indtosub(data, dims, order='F', one_based=True):
     :param order: 'C' or 'F', for row-major or column-major array indexing. See numpy.unravel_index.
     :param one_based: True if generated subscript indices are to start at 1, False to start at 0
     """
-    if not order in ('C', 'F'):
-        raise TypeError("Order %s not understood, should be 'C' or 'F'.")
+    _check_order(order)
 
     def indtosub_inline_onebased(k, dimprod):
         return tuple(map(lambda (x, y): int(mod(ceil(float(k)/y) - 1, x) + 1), dimprod))
