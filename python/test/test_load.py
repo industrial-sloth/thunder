@@ -60,9 +60,9 @@ def test_subtoind_parameterized():
     parameters = [SubToIndParameters([(1, 1, 1), (2, 1, 1), (1, 2, 1), (2, 2, 1), (1, 3, 1), (2, 3, 1),
                                       (1, 1, 2), (2, 1, 2), (1, 2, 2), (2, 2, 2), (1, 3, 2), (2, 3, 2)],
                                      dims=(2, 3, 2), indices=range(1, 13)),
-                  SubToIndParameters([(0, 1, 1)], dims=(2, 3, 2), indices=[0]),
-                  SubToIndParameters([(-1, 1), (0, 1), (1, 1), (2, 1), (3, 1)], dims=(2, 1),
-                                     indices=[-1, 0, 1, 2, 3]),
+                  # SubToIndParameters([(0, 1, 1)], dims=(2, 3, 2), indices=[0]),
+                  # SubToIndParameters([(-1, 1), (0, 1), (1, 1), (2, 1), (3, 1)], dims=(2, 1),
+                  #                    indices=[-1, 0, 1, 2, 3]),
                   SubToIndParameters([(-1,), (0,), (1,), (2,), (3,)], dims=(1,),
                                      indices=[-1, 0, 1, 2, 3])
                   ]

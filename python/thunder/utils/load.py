@@ -4,7 +4,8 @@ Utilities for loading and preprocessing data
 
 import pyspark
 from numpy import array, mean, cumprod, append, mod, ceil, size, \
-    polyfit, polyval, arange, percentile, inf, subtract
+    polyfit, polyval, arange, percentile, inf, subtract, \
+    asarray, ravel_multi_index
 from scipy.signal import butter, lfilter
 
 
@@ -183,7 +184,13 @@ def subtoind(data, dims):
         if isrdd(data):
             return data.map(lambda (k, v): (subtoind_inline(k, dimprod), v))
         else:
-            return map(lambda (k, v): (subtoind_inline(k, dimprod), v), data)
+            # return map(lambda (k, v): (subtoind_inline(k, dimprod), v), data)
+            keys, vals = zip(*data)
+            key_arys = asarray(zip(*keys)) - 1
+            # print key_arys
+            raveled = ravel_multi_index(key_arys, dims, order='F', mode='wrap') + 1
+            return zip(raveled, vals)
+
     else:
         if isrdd(data):
             return data.map(lambda (k, v): (k[0], v))
