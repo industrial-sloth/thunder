@@ -58,7 +58,7 @@ class BotoS3Reader(object):
     @staticmethod
     def _parseS3Schema(datapath):
         parseresult = urlparse.urlparse(datapath)
-        return parseresult.netloc, parseresult.path
+        return parseresult.netloc, parseresult.path.lstrip("/")
 
     def __init__(self, sparkcontext):
         if not _have_boto:
