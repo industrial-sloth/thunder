@@ -100,10 +100,12 @@ class BotoS3Reader(object):
 
         def readSplitFromS3(kvIter):
             conn = boto.connect_s3(aws_access_key_id=access_key, aws_secret_access_key=secret_key)
-            bucket = conn.get_bucket(bucketname, validate=False)
+            # bucket = conn.get_bucket(bucketname, validate=False)
+            bucket = conn.get_bucket(bucketname)
             for kv in kvIter:
                 idx, keyname = kv
-                key = bucket.get_key(keyname, validate=False)
+                #key = bucket.get_key(keyname, validate=False)
+                key = bucket.get_key(keyname)
                 buf = key.get_contents_as_string()
                 yield idx, buf
 
