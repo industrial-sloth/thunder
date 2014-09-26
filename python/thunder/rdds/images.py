@@ -9,7 +9,7 @@ from matplotlib.pyplot import imread
 from io import BytesIO
 from series import Series
 from thunder.rdds.data import Data, parseMemoryString
-from thunder.rdds.readers import LocalFSReader
+from thunder.rdds.readers import getReaderForPath
 
 
 class Images(Data):
@@ -444,7 +444,7 @@ class ImagesLoader(object):
             # previously we were casting to uint16 - necessary?
             return frombuffer(buf, dtype='int16', count=prod(dims)).reshape(dims, order='F')
 
-        reader = LocalFSReader(self.sc)
+        reader = getReaderForPath(datafile)(self.sc)
         readerrdd = reader.read(datafile, ext=ext, startidx=startidx, stopidx=stopidx)
         return Images(readerrdd.mapValues(toArray), nimages=reader.lastnrecs, dims=dims, dtype='int16')
         # files = self.listFiles(datafile, ext=ext, startidx=startidx, stopidx=stopidx)
@@ -456,7 +456,7 @@ class ImagesLoader(object):
             fbuf = BytesIO(buf)
             return imread(fbuf, format='tif')
 
-        reader = LocalFSReader(self.sc)
+        reader = getReaderForPath(datafile)(self.sc)
         readerrdd = reader.read(datafile, ext=ext, startidx=startidx, stopidx=stopidx)
         return Images(readerrdd.mapValues(readTifFromBuf), nimages=reader.lastnrecs)
 
@@ -499,7 +499,7 @@ class ImagesLoader(object):
             return concatenate(imgarys, axis=2)
 
         #return self.fromFile(datafile, multitifReader, ext=ext, startidx=startidx, stopidx=stopidx)
-        reader = LocalFSReader(self.sc)
+        reader = getReaderForPath(datafile)(self.sc)
         readerrdd = reader.read(datafile, ext=ext, startidx=startidx, stopidx=stopidx)
         return Images(readerrdd.mapValues(multitifReader), nimages=reader.lastnrecs)
 
@@ -516,7 +516,7 @@ class ImagesLoader(object):
             fbuf = BytesIO(buf)
             return imread(fbuf, format='png')
 
-        reader = LocalFSReader(self.sc)
+        reader = getReaderForPath(datafile)(self.sc)
         readerrdd = reader.read(datafile, ext=ext, startidx=startidx, stopidx=stopidx)
         return Images(readerrdd.mapValues(readPngFromBuf), nimages=reader.lastnrecs)
 
