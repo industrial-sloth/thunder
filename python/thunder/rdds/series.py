@@ -246,9 +246,15 @@ class SeriesLoader(object):
         """
         params = SeriesLoader.loadConf(datafile, conffile=conffilename)
         # filter dict to include only recognized field names:
-        params = {k: v for k, v in params.items() if k in SeriesLoader.BinaryLoadParameters._fields}
+        #params = {k: v for k, v in params.items() if k in SeriesLoader.BinaryLoadParameters._fields}
+        for k in params.keys():
+            if not k in SeriesLoader.BinaryLoadParameters._fields:
+                del params[k]
         keywordparams = {'nkeys': nkeys, 'nvalues': nvalues, 'keyformat': keytype, 'format': valuetype}
-        keywordparams = {k: v for k, v in keywordparams.items() if v}
+        #keywordparams = {k: v for k, v in keywordparams.items() if v}
+        for k, v in keywordparams.items():
+            if not v:
+                del keywordparams[k]
         params.update(keywordparams)
         return SeriesLoader.BinaryLoadParameters(**params)
 
