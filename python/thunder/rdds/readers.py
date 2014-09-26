@@ -119,4 +119,4 @@ SCHEMAS_TO_READERS = {
 
 def getReaderForPath(datapath):
     parseresult = urlparse.urlparse(datapath)
-    return SCHEMAS_TO_READERS.get(parseresult.scheme, d=LocalFSReader)
+    return SCHEMAS_TO_READERS.get(parseresult.scheme, LocalFSReader)
