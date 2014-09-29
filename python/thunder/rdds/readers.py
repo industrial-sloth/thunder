@@ -122,7 +122,7 @@ class HadoopReader(object):
     def _listFiles(self, datapath, ext=None, startidx=None, stopidx=None):
         nameskv = self.sc.newAPIHadoopFile(datapath, 'thunder.util.io.hadoop.FileNameInputFormat',
                                          'org.apache.hadoop.io.Text',
-                                         'org.apache.hadoop.io.NullWritable')
+                                         'org.apache.hadoop.io.IntWritable')
         ntotalfiles = nameskv.count()
         if ext:
             nameskv.filter(lambda k, _: k.endswith(ext))
@@ -151,7 +151,7 @@ class HadoopReader(object):
                                          'org.apache.hadoop.io.Text',
                                          'org.apache.hadoop.io.BytesWritable',
                                          conf=conf)
-        return lines.map(lambda k, v: (bcastnameorder[k], v))
+        return lines.map(lambda (k, v): (bcastnameorder.value[k], v))
 
 
 SCHEMAS_TO_READERS = {

@@ -1,11 +1,11 @@
 package thunder.util.io.hadoop
 
-import org.apache.hadoop.io.{NullWritable, Text}
+import org.apache.hadoop.io.{IntWritable, NullWritable, Text}
 import org.apache.hadoop.mapreduce.lib.input.FileSplit
 import org.apache.hadoop.mapreduce.{InputSplit, RecordReader, TaskAttemptContext}
 
 
-class FileNameRecordReader extends RecordReader[Text, NullWritable] {
+class FileNameRecordReader extends RecordReader[Text, IntWritable] {
 
   override def initialize(inputSplit: InputSplit, context: TaskAttemptContext) {
 
@@ -18,7 +18,7 @@ class FileNameRecordReader extends RecordReader[Text, NullWritable] {
     recordKey
   }
 
-  override def getCurrentValue: NullWritable = {
+  override def getCurrentValue: IntWritable = {
     recordValue
   }
 
@@ -28,13 +28,16 @@ class FileNameRecordReader extends RecordReader[Text, NullWritable] {
 
   override def nextKeyValue(): Boolean = {
 
-    if (recordKey == null) {
-      recordKey = new Text(fileSplit.getPath.getName)
-      recordValue = NullWritable.get
-    }
+    if (! processed) {
+      if (recordKey == null) {
+        recordKey = new Text(fileSplit.getPath.getName)
+        recordValue = new IntWritable(0)
+      }
 
-    processed = true
-    true
+      processed = true
+      return true
+    }
+    false
   }
 
   override def close() {
@@ -43,6 +46,6 @@ class FileNameRecordReader extends RecordReader[Text, NullWritable] {
 
   var fileSplit: FileSplit = null
   var recordKey: Text = null
-  var recordValue: NullWritable = null
+  var recordValue: IntWritable = null
   var processed: Boolean = false
 }
