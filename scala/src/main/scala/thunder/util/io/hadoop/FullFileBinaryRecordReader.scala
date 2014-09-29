@@ -5,12 +5,12 @@ import java.io.IOException
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FSDataInputStream, FileSystem, Path}
 import org.apache.hadoop.io.compress.CompressionCodecFactory
-import org.apache.hadoop.io.{IOUtils, BytesWritable, LongWritable}
+import org.apache.hadoop.io.{Text, IOUtils, BytesWritable, LongWritable}
 import org.apache.hadoop.mapreduce.lib.input.FileSplit
 import org.apache.hadoop.mapreduce.{TaskAttemptContext, InputSplit, RecordReader}
 
 
-class FullFileBinaryRecordReader extends RecordReader[LongWritable, BytesWritable] {
+class FullFileBinaryRecordReader extends RecordReader[Text, BytesWritable] {
 
   override def initialize(inputSplit: InputSplit, context: TaskAttemptContext) {
 
@@ -29,9 +29,14 @@ class FullFileBinaryRecordReader extends RecordReader[LongWritable, BytesWritabl
       throw new IOException("FullFileBinaryRecordReader does not support reading compressed files")
     }
 
+    val whitelistProp: java.lang.String = conf.get("whitelist", "")
+    if (! whitelistProp.isEmpty) {
+      whitelistSet = Some(whitelistProp.split(",").toSet)
+    }
+
   }
 
-  override def getCurrentKey: LongWritable = {
+  override def getCurrentKey: Text = {
     recordKey
   }
 
@@ -45,16 +50,23 @@ class FullFileBinaryRecordReader extends RecordReader[LongWritable, BytesWritabl
 
   override def nextKeyValue(): Boolean = {
 
-    if (recordKey == null) {
-      recordKey = new LongWritable(0L)
-      recordValue = new BytesWritable
-    }
-
     if (!processed) {
+
+      val filePath: Path = fileSplit.getPath
+      if (whitelistSet.isDefined && (! whitelistSet.get.contains(filePath.getName))) {
+        // we have passed in a whitelist of filenames to read, and this file isn't in it
+        processed = true
+        return false
+      }
+
+      if (recordKey == null) {
+        recordKey = new Text(fileSplit.getPath.getName)
+        recordValue = new BytesWritable
+      }
 
       val contents = new Array[Byte](fileSplit.getLength.toInt)
 
-      val filePath: Path = fileSplit.getPath
+
       val fs: FileSystem = filePath.getFileSystem(conf)
 
       var fileInputStream: FSDataInputStream = null
@@ -69,6 +81,7 @@ class FullFileBinaryRecordReader extends RecordReader[LongWritable, BytesWritabl
       processed = true
       return true
     }
+
   false
   }
 
@@ -78,7 +91,8 @@ class FullFileBinaryRecordReader extends RecordReader[LongWritable, BytesWritabl
 
   var conf: Configuration = null
   var fileSplit: FileSplit = null
-  var recordKey: LongWritable = null
+  var recordKey: Text = null
   var recordValue: BytesWritable = null
+  var whitelistSet: Option[Set[String]] = None
   var processed: Boolean = false
 }

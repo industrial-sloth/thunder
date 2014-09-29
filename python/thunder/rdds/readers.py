@@ -110,12 +110,55 @@ class BotoS3Reader(object):
                 yield idx, buf
 
         # don't specify number of splits here - allow reuse of connections within partition
+        self.lastnrecs = len(keynamelist)
         return self.sc.parallelize(enumerate(keynamelist)).mapPartitions(readSplitFromS3)
+
+
+class HadoopReader(object):
+    def __init__(self, sparkcontext):
+        self.sc = sparkcontext
+        self.lastnrecs = None
+
+    def _listFiles(self, datapath, ext=None, startidx=None, stopidx=None):
+        nameskv = self.sc.newAPIHadoopFile(datapath, 'thunder.util.io.hadoop.FileNameInputFormat',
+                                         'org.apache.hadoop.io.Text',
+                                         'org.apache.hadoop.io.NullWritable')
+        ntotalfiles = nameskv.count()
+        if ext:
+            nameskv.filter(lambda k, _: k.endswith(ext))
+        nameskvseq = nameskv.sortByKey(1).collect()
+        if startidx or stopidx:
+            if startidx is None:
+                startidx = 0
+            if stopidx is None:
+                stopidx = len(nameskvseq)
+            nameskvseq = nameskvseq[startidx:stopidx]
+        return [name for name, _ in nameskvseq], ntotalfiles
+
+    def read(self, datapath, ext=None, startidx=None, stopidx=None):
+        names, ntotalfiles = self._listFiles(datapath, ext=ext, startidx=startidx, stopidx=stopidx)
+        # names.sort()  # already sorted
+        nfiles = len(names)
+        whitelist = ",".join(names) if nfiles < ntotalfiles else None
+        conf = {"whitelist": whitelist} if whitelist else {}
+
+        # get and broadcast ordered list of filenames
+        nameorder = dict(zip(names, xrange(len(names))))
+        bcastnameorder = self.sc.broadcast(nameorder)
+
+
+        lines = self.sc.newAPIHadoopFile(datapath, 'thunder.util.io.hadoop.FullFileBinaryInputFormat',
+                                         'org.apache.hadoop.io.Text',
+                                         'org.apache.hadoop.io.BytesWritable',
+                                         conf=conf)
+        return lines.map(lambda k, v: (bcastnameorder[k], v))
+
 
 SCHEMAS_TO_READERS = {
     '': LocalFSReader,
-    's3': BotoS3Reader,
-    's3n': BotoS3Reader
+    's3': BotoS3Reader if _have_boto else HadoopReader,
+    's3n': BotoS3Reader if _have_boto else HadoopReader,
+    'hdfs': HadoopReader
 }
 
 
