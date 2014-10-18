@@ -47,6 +47,15 @@ def install_thunder(master, opts):
     # install libraries
     ssh(master, opts, "source ~/.bash_profile && pip install mpld3 && pip install seaborn "
                       "&& pip install jinja2 && pip install -U scikit-learn")
+    # update matplotlib
+    ssh(master, opts, "yum install -y python-six freetype-devel libpng-devel")
+    ssh(master, opts,
+        "wget https://downloads.sourceforge.net/project/matplotlib/matplotlib/matplotlib-1.4.0/matplotlib-1.4.0.tar.gz")
+    ssh(master, opts, "tar -xvf matplotlib*.gz")
+    # matplotlib cont'd: downgrade freetype requirement -
+    # see matplotlib install notes: http://matplotlib.org/users/installing.html
+    ssh(master, opts, "sed -i.bak '945s/2.4/2.3/' matplotlib*/setupext.py")
+    ssh(master, opts, "cd matplotlib* && sudo python setup.py install")
     # install ipython 1.1
     ssh(master, opts, "pip uninstall -y ipython")
     ssh(master, opts, "git clone https://github.com/ipython/ipython.git")
