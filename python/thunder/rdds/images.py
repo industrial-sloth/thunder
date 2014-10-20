@@ -58,35 +58,6 @@ class Images(Data):
         if not isinstance(record[1], ndarray):
             raise Exception('Values must be ndarrays')
 
-    def __validateOrCalcGroupingDim(self, groupingDim=None):
-        """Bounds-checks the passed grouping dimension, calculating it if None is passed.
-
-        Returns a valid grouping dimension between 0 and ndims-1, or throws ValueError if passed groupingdim is out of
-        bounds.
-
-        The calculation may trigger a spark first() call.
-        """
-        def calcGroupingDim(dims):
-            """Returns the index of the dimension to use for grouping by image planes.
-
-            The current heuristic is just to take the largest dimension - last largest dimension
-            in case of ties.
-            """
-            maxd = reduce(max, dims)
-            maxidxs = [i for i in xrange(len(dims)) if dims[i] == maxd]
-            return maxidxs[-1]
-
-        imgdims = self.dims
-        nimgdims = len(imgdims)
-        if not groupingDim is None:
-            if groupingDim < -1*nimgdims or groupingDim >= nimgdims:
-                raise ValueError("Grouping dimension must be between %d and %d for a %d-dimensional image; got %d" %
-                                 (-1*nimgdims, nimgdims-1, nimgdims, groupingDim))
-            gd = groupingDim if groupingDim >= 0 else nimgdims + groupingDim
-        else:
-            gd = calcGroupingDim(imgdims)
-        return gd
-
     def partition(self, partitioningStrategy):
         partitioningStrategy.setImages(self)
         returntype = partitioningStrategy.getPartitionedImagesClass()
