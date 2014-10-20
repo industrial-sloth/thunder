@@ -2,8 +2,82 @@ import cStringIO as StringIO
 import itertools
 from numpy import zeros, reshape
 import struct
+from thunder.rdds.images import PartitioningStrategy
 from thunder.rdds.data import Data
 from thunder.rdds.series import Series
+
+
+class ImageBlocksPartitioningStrategy(PartitioningStrategy):
+    def __init__(self, splitsPerDim, numSparkPartitions=None):
+        super(ImageBlocksPartitioningStrategy, self).__init__()
+        self._splitsPerDim = ImageBlocksPartitioningStrategy.__normalizeSplits(splitsPerDim)
+        self._slices = None
+        self._npartitions = reduce(lambda x, y: x * y, self._splitsPerDim, 1) if not numSparkPartitions \
+            else int(numSparkPartitions)
+
+    @property
+    def npartitions(self):
+        return self._npartitions
+
+    @staticmethod
+    def __normalizeSplits(splitsPerDim):
+        splitsPerDim = map(int, splitsPerDim)
+        if any((nsplits <= 0 for nsplits in splitsPerDim)):
+            raise ValueError("All numbers of blocks must be positive; got " + str(splitsPerDim))
+        return splitsPerDim
+
+    def __validateSplitsForImage(self):
+        dims = self.dims
+        splitsPerDim = self._splitsPerDim
+        ndim = len(dims)
+        if not len(splitsPerDim) == ndim:
+            raise ValueError("splitsPerDim length (%d) must match image dimensionality (%d); " %
+                             (len(splitsPerDim), ndim) +
+                             "have splitsPerDim %s and image shape %s" % (str(splitsPerDim), str(dims)))
+
+    @staticmethod
+    def __generateSlices(splitsPerDim, dims):
+        # slices will be sequence of sequences of slices
+        # slices[i] will hold slices for ith dimension
+        slices = []
+        for nsplits, dimsize in zip(splitsPerDim, dims):
+            blocksize = dimsize / nsplits  # integer division
+            blockrem = dimsize % nsplits
+            st = 0
+            dimslices = []
+            for blockidx in xrange(nsplits):
+                en = st + blocksize
+                if blockrem:
+                    en += 1
+                    blockrem -= 1
+                dimslices.append(slice(st, min(en, dimsize), 1))
+                st = en
+            slices.append(dimslices)
+        return slices
+
+    def setImages(self, images):
+        super(ImageBlocksPartitioningStrategy, self).setImages(images)
+        self.__validateSplitsForImage()
+        self._slices = ImageBlocksPartitioningStrategy.__generateSlices(self._splitsPerDim, self.dims)
+
+    def partitionFunction(self, timePointIdxAndImageArray):
+        tpidx, imgary = timePointIdxAndImageArray
+        totnumimages = self.nimages
+        slices = self._slices
+
+        ret_vals = []
+        sliceproduct = itertools.product(*slices)
+        for blockslices in sliceproduct:
+            blockval = ImageBlockValue.fromArrayBySlices(imgary, blockslices, docopy=False)
+            blockval = blockval.addDimension(newdimidx=tpidx, newdimsize=totnumimages)
+            # resulting key will be (x, y, z) (for 3d data), where x, y, z are starting
+            # position of block within image volume
+            newkey = [sl.start for sl in blockslices]
+            ret_vals.append((tuple(newkey), blockval))
+        return ret_vals
+
+    def blockingFunction(self, partitionedSequence):
+        return ImageBlockValue.fromPlanarBlocks(partitionedSequence, 0)
 
 
 class ImageBlocks(Data):

@@ -324,6 +324,12 @@ class Images(Data):
         writeSeriesConfig(outputdirname, len(self.dims), self.nimages, dims=self.dims,
                           keytype='int16', valuetype=self.dtype, overwrite=overwrite)
 
+    def partition(self, partitioningStrategy):
+        partitioningStrategy.setImages(self)
+        vals = self.rdd.flatMap(partitioningStrategy.partitionFunction, preservesPartitioning=False)
+        groupedvals = vals.groupByKey(numPartitions=partitioningStrategy.npartitions)
+        return groupedvals.mapValues(partitioningStrategy.blockingFunction)
+
     def exportAsPngs(self, outputdirname, fileprefix="export", overwrite=False,
                      collectToDriver=True):
         """Write out basic png files for two-dimensional image data.
@@ -491,6 +497,42 @@ class Images(Data):
             Function to apply
         """
         return self._constructor(self.rdd.mapValues(func)).__finalize__(self)
+
+
+class PartitioningStrategy(object):
+    """Superclass for objects that define ways to split up images into smaller blocks.
+    """
+    def __init__(self):
+        self._dims = None
+        self._nimages = None
+        self._dtype = None
+
+    @property
+    def dims(self):
+        return self._dims
+
+    @property
+    def nimages(self):
+        return self._nimages
+
+    @property
+    def dtype(self):
+        return self.dtype
+
+    def setImages(self, images):
+        self._dims = images.dims
+        self._nimages = images.nimages
+        self._dtype = images.dtype
+
+    def partitionFunction(self, timePointIdxAndImageArray):
+        raise NotImplementedError("partitionFunction not implemented")
+
+    def blockingFunction(self, partitionedSequence):
+        raise NotImplementedError("blockingFunction not implemented")
+
+    @property
+    def npartitions(self):
+        raise NotImplementedError("numPartitions not implemented")
 
 
 class _BlockMemoryAsSequence(object):
