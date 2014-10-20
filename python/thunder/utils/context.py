@@ -326,12 +326,18 @@ class ThunderContext():
 
         if shuffle:
             from thunder.rdds.fileio.imagesloader import ImagesLoader
+            from thunder.rdds.imageblocks import ImageBlocksPartitioningStrategy
             loader = ImagesLoader(self._sc)
             if inputformat.lower() == 'stack':
-                loader.fromStack(datapath, dims, startidx=startidx, stopidx=stopidx)\
-                    .saveAsBinarySeries(outputdirpath, blockSize=blocksize, overwrite=overwrite)
+                images = loader.fromStack(datapath, dims, startidx=startidx, stopidx=stopidx)
             else:
-                loader.fromMultipageTif(datapath, startidx=startidx, stopidx=stopidx)
+                images = loader.fromMultipageTif(datapath, startidx=startidx, stopidx=stopidx)
+            strategy = ImageBlocksPartitioningStrategy.generateFromBlockSize(blockSize=blocksize,
+                                                                             dims=images.dims,
+                                                                             nimages=images.nimages,
+                                                                             datatype=images.dtype)
+            blocks = images.partition(strategy)
+            blocks.saveAsBinarySeries(outputdirpath, overwrite=overwrite)
         else:
             from thunder.rdds.fileio.seriesloader import SeriesLoader
             loader = SeriesLoader(self._sc)
