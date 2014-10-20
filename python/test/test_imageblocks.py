@@ -95,6 +95,7 @@ class TestImageBlockValue(unittest.TestCase):
             # check value equality
             assert_true(array_equal(expected[1], actual[1]))
 
+
 class TestBlockMemoryAsSequence(unittest.TestCase):
     def test_range(self):
         dims = (2, 2)

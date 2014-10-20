@@ -146,15 +146,8 @@ class ImageBlocks(PartitionedImages):
             yield tuple(seriesKey), seriesVal
 
     def toSeries(self, seriesDim=0):
-
-        def blockToSeriesAdapter(kv):
-            blockKey, blockVal = kv
-            return ImageBlocks._blockToSeries(blockVal, seriesDim)
-
-        blockedrdd = self._groupIntoSeriesBlocks()
-
         # returns generator of (z, y, x) array data for all z, y, x
-        seriesrdd = blockedrdd.flatMap(blockToSeriesAdapter)
+        seriesrdd = self.rdd.flatMap(lambda kv: ImageBlocks._blockToSeries(kv[1], seriesDim))
         return Series(seriesrdd)
 
     @staticmethod
@@ -171,8 +164,6 @@ class ImageBlocks(PartitionedImages):
 
     def toBinarySeries(self, seriesDim=0):
 
-        blockedrdd = self._groupIntoSeriesBlocks()
-
         def blockToBinarySeries(kv):
             blockKey, blockVal = kv
             label = ImageBlocks.getBinarySeriesNameForKey(blockKey) + ".bin"
@@ -188,24 +179,7 @@ class ImageBlocks(PartitionedImages):
             buf.close()
             return label, val
 
-        return blockedrdd.map(blockToBinarySeries)
-
-    def _groupIntoSeriesBlocks(self):
-        """Combine blocks representing individual image blocks into a single time-by-blocks volume
-
-        Returns:
-        --------
-        RDD, key/value: tuple of int, ImageBlockValue
-        key:
-            spatial indicies of start of block, for instance (x, y, z): (0, 0, 0), (0, 0, 1),... (0, 0, z_max-1)
-        value:
-            ImageBlockValue with single fully-populated array, dimensions of time by space, for instance (t, x, y, z):
-            ary[0:t_max, :, :, z_i]
-        """
-        # key will be x, y, z for start of block
-        # val will be single blockvalue array data with origshape and origslices in dimensions (t, x, y, z)
-        # val array data will be t by (spatial block size)
-        return self.rdd.groupByKey().mapValues(lambda v: ImageBlockValue.fromPlanarBlocks(v, 0))
+        return self.rdd.map(blockToBinarySeries)
 
 
 class ImageBlockValue(object):
@@ -275,26 +249,6 @@ class ImageBlockValue(object):
     def fromArrayBySlices(cls, imagearray, slices, docopy=False):
         slicedary = imagearray[slices].copy() if docopy else imagearray[slices]
         return cls(imagearray.shape, tuple(slices), slicedary)
-
-    @classmethod
-    def fromBlocks_orig(cls, blocksIter):
-        """Creates a new ImageBlockValue from an iterator over blocks with compatible origshape.
-
-        The new ImageBlockValue created will have values of shape origshape. Each block will
-        copy its own data into the newly-created array according to the slicing given by its origslices
-        attribute.
-
-        """
-        ary = None
-        for block in blocksIter:
-            if ary is None:
-                ary = zeros(block.origshape, dtype=block.values.dtype)
-
-            if not tuple(ary.shape) == tuple(block.origshape):
-                raise ValueError("Shape mismatch; blocks specify differing original shapes %s and %s" %
-                                 (str(block.origshape), str(ary.shape)))
-            ary[block.origslices] = block.values
-        return cls.fromArray(ary)
 
     @classmethod
     def fromPlanarBlocks(cls, blocksIter, planarDim):
@@ -463,6 +417,7 @@ class ImageBlockValue(object):
     def __repr__(self):
         return "ImageBlockValue(origshape=%s, origslices=%s, values=%s)" % \
                (repr(self.origshape), repr(self.origslices), repr(self.values))
+
 
 class _BlockMemoryAsSequence(object):
     """Helper class used in calculation of slices for requested block partitions of a particular size.
