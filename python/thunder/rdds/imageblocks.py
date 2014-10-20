@@ -32,6 +32,9 @@ class ImageBlocksPartitioningStrategy(PartitioningStrategy):
         self._npartitions = reduce(lambda x, y: x * y, self._splitsPerDim, 1) if not numSparkPartitions \
             else int(numSparkPartitions)
 
+    def getPartitionedImagesClass(self):
+        return ImageBlocks
+
     @classmethod
     def generateFromBlockSize(cls, blockSize, dims, nimages, datatype, numSparkPartitions=None):
         """Returns a new ImageBlocksPartitioningStrategy, that yields blocks

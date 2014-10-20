@@ -89,10 +89,11 @@ class Images(Data):
 
     def partition(self, partitioningStrategy):
         partitioningStrategy.setImages(self)
+        returntype = partitioningStrategy.getPartitionedImagesClass()
         vals = self.rdd.flatMap(partitioningStrategy.partitionFunction, preservesPartitioning=False)
         groupedvals = vals.groupByKey(numPartitions=partitioningStrategy.npartitions)
         blockedvals = groupedvals.mapValues(partitioningStrategy.blockingFunction)
-        return PartitionedImages(blockedvals, self.dims, self.nimages, self.dtype)
+        return returntype(blockedvals, self.dims, self.nimages, self.dtype)
 
     def exportAsPngs(self, outputdirname, fileprefix="export", overwrite=False,
                      collectToDriver=True):
@@ -309,6 +310,13 @@ class PartitioningStrategy(object):
         self._dims = images.dims
         self._nimages = images.nimages
         self._dtype = images.dtype
+
+    def getPartitionedImagesClass(self):
+        """Get the subtype of PartitionedImages that instances of this strategy will produce.
+
+        Subclasses should override this method to return the appropriate PartitionedImages subclass.
+        """
+        return PartitionedImages
 
     def partitionFunction(self, timePointIdxAndImageArray):
         raise NotImplementedError("partitionFunction not implemented")
