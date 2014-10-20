@@ -328,7 +328,8 @@ class Images(Data):
         partitioningStrategy.setImages(self)
         vals = self.rdd.flatMap(partitioningStrategy.partitionFunction, preservesPartitioning=False)
         groupedvals = vals.groupByKey(numPartitions=partitioningStrategy.npartitions)
-        return groupedvals.mapValues(partitioningStrategy.blockingFunction)
+        blockedvals = groupedvals.mapValues(partitioningStrategy.blockingFunction)
+        return PartitionedImages(blockedvals, self.dims, self.nimages, self.dtype)
 
     def exportAsPngs(self, outputdirname, fileprefix="export", overwrite=False,
                      collectToDriver=True):
@@ -533,6 +534,61 @@ class PartitioningStrategy(object):
     @property
     def npartitions(self):
         raise NotImplementedError("numPartitions not implemented")
+
+
+class PartitionedImages(Data):
+    """Superclass for data returned by an Images.partition() call.
+    """
+    def __init__(self, rdd, dims, nimages, dtype):
+        super(PartitionedImages, self).__init__(rdd)
+        self._dims = dims
+        self._nimages = nimages
+        self._dtype = dtype
+
+    @property
+    def dims(self):
+        return self._dims
+
+    @property
+    def nimages(self):
+        return self._nimages
+
+    @property
+    def dtype(self):
+        return self._dtype
+
+    def toSeries(self):
+        """Returns a Series Data object.
+
+        Subclasses that can be converted to a Series object are expected to override this method.
+        """
+        raise NotImplementedError("toSeries not implemented")
+
+    def toBinarySeries(self):
+        """Returns an RDD of binary series data.
+
+        The keys of a binary series RDD should be filenames ending in ".bin".
+        The values should be packed binary data.
+
+        Subclasses that can be converted to a Series object are expected to override this method.
+        """
+        raise NotImplementedError
+
+    def saveAsBinarySeries(self, outputdirname, overwrite=False):
+        """Writes out Series-formatted data.
+
+        Subclasses are *not* expected to override this method.
+        """
+        from thunder.rdds.fileio.writers import getParallelWriterForPath
+        from thunder.rdds.fileio.seriesloader import writeSeriesConfig
+
+        writer = getParallelWriterForPath(outputdirname)(outputdirname, overwrite=overwrite)
+
+        binseriesrdd = self.toBinarySeries()
+
+        binseriesrdd.foreach(writer.writerFcn)
+        writeSeriesConfig(outputdirname, len(self.dims), self.nimages, dims=self.dims,
+                          keytype='int16', valuetype=self.dtype, overwrite=overwrite)
 
 
 class _BlockMemoryAsSequence(object):

@@ -2,8 +2,7 @@ import cStringIO as StringIO
 import itertools
 from numpy import zeros, reshape
 import struct
-from thunder.rdds.images import PartitioningStrategy
-from thunder.rdds.data import Data
+from thunder.rdds.images import PartitioningStrategy, PartitionedImages
 from thunder.rdds.series import Series
 
 
@@ -80,7 +79,7 @@ class ImageBlocksPartitioningStrategy(PartitioningStrategy):
         return ImageBlockValue.fromPlanarBlocks(partitionedSequence, 0)
 
 
-class ImageBlocks(Data):
+class ImageBlocks(PartitionedImages):
     """Intermediate representation used in conversion from Images to Series.
 
     This class is not expected to be directly used by clients.
@@ -103,6 +102,9 @@ class ImageBlocks(Data):
         seriesrdd = blockedrdd.flatMap(blockToSeriesAdapter)
         return Series(seriesrdd)
 
+    def saveAsBinarySeries(self, outputdirname, overwrite=False):
+        binseriesrdd = self.toBinarySeries(seriesDim=0)
+
     @staticmethod
     def getBinarySeriesNameForKey(blockKey):
         """
@@ -121,7 +123,7 @@ class ImageBlocks(Data):
 
         def blockToBinarySeries(kv):
             blockKey, blockVal = kv
-            label = ImageBlocks.getBinarySeriesNameForKey(blockKey)
+            label = ImageBlocks.getBinarySeriesNameForKey(blockKey) + ".bin"
             keypacker = None
             buf = StringIO.StringIO()
             for seriesKey, series in ImageBlocks._blockToSeries(blockVal, seriesDim):
