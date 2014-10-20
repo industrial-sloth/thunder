@@ -9,7 +9,7 @@ import itertools
 from nose.tools import assert_equals, assert_true, assert_almost_equal, assert_raises
 
 from thunder.rdds.fileio.imagesloader import ImagesLoader
-from thunder.rdds.images import _BlockMemoryAsReversedSequence
+from thunder.rdds.imageblocks import ImageBlocksPartitioningStrategy
 from test_utils import PySparkTestCase, PySparkTestCaseWithOutputDir
 
 
@@ -43,7 +43,8 @@ class TestImages(PySparkTestCase):
         arys, sh, sz = _generate_test_arrays(narys)
 
         imagedata = ImagesLoader(self.sc).fromArrays(arys)
-        series = imagedata.toSeries(groupingDim=0).collect()
+        strategy = ImageBlocksPartitioningStrategy(splitsPerDim=(4, 1, 1))
+        series = imagedata.partition(strategy).toSeries().collect()
 
         self.evaluate_series(arys, series, sz)
 
@@ -60,67 +61,10 @@ class TestImages(PySparkTestCase):
             (2, 1, 1), (2, 1, 2), (2, 1, 3), (2, 2, 1), (2, 2, 2), (2, 2, 3),
             (2, 3, 1), (2, 3, 2), (2, 3, 3)]
         for bpd in test_params:
-            series = imagedata.toSeries(splitsPerDim=bpd).collect()
+            strategy = ImageBlocksPartitioningStrategy(splitsPerDim=bpd)
+            series = imagedata.partition(strategy).toSeries().collect()
 
             self.evaluate_series(arys, series, sz)
-
-    def test_toBlocksByPlanes(self):
-        # create 3 arrays of 4x3x3 images (C-order), containing sequential integers
-        narys = 3
-        arys, sh, sz = _generate_test_arrays(narys)
-
-        grpdim = 0
-        blocks = ImagesLoader(self.sc).fromArrays(arys) \
-            ._toBlocksByImagePlanes(groupingDim=grpdim).collect()
-
-        assert_equals(sh[grpdim]*narys, len(blocks))
-
-        keystocounts = Counter([kv[0] for kv in blocks])
-        # expected keys are (index, 0, 0) (or (z, y, x)) for index in grouping dimension
-        expectedkeys = set((idx, 0, 0) for idx in xrange(sh[grpdim]))
-        expectednkeys = sh[grpdim]
-        assert_equals(expectednkeys, len(keystocounts))
-        # check all expected keys are present:
-        assert_true(expectedkeys == set(keystocounts.iterkeys()))
-        # check all keys appear the expected number of times (once per input array):
-        assert_equals([narys]*expectednkeys, keystocounts.values())
-
-        # check that we can get back the expected planes over time:
-        for blockkey, blockplane in blocks:
-            tpidx = blockplane.origslices[grpdim].start
-            planeidx = blockkey[grpdim]
-            expectedplane = arys[tpidx][planeidx, :, :]
-            assert_true(array_equal(expectedplane, blockplane.values.squeeze()))
-
-    def test_toBlocksBySlices(self):
-        narys = 3
-        arys, sh, sz = _generate_test_arrays(narys)
-
-        imagedata = ImagesLoader(self.sc).fromArrays(arys)
-
-        test_params = [
-            (1, 1, 1), (1, 1, 2), (1, 1, 3), (1, 2, 1), (1, 2, 2), (1, 2, 3),
-            (1, 3, 1), (1, 3, 2), (1, 3, 3),
-            (2, 1, 1), (2, 1, 2), (2, 1, 3), (2, 2, 1), (2, 2, 2), (2, 2, 3),
-            (2, 3, 1), (2, 3, 2), (2, 3, 3)]
-        for bpd in test_params:
-            blocks = imagedata._toBlocksBySplits(bpd).collect()
-
-            expectednuniquekeys = reduce(mul, bpd)
-            expectedvalsperkey = narys
-
-            keystocounts = Counter([kv[0] for kv in blocks])
-            assert_equals(expectednuniquekeys, len(keystocounts))
-            assert_equals([expectedvalsperkey] * expectednuniquekeys, keystocounts.values())
-
-            gatheredary = None
-            for _, block in blocks:
-                if gatheredary is None:
-                    gatheredary = zeros(block.origshape, dtype='int16')
-                gatheredary[block.origslices] = block.values
-
-            for i in xrange(narys):
-                assert_true(array_equal(arys[i], gatheredary[i]))
 
 
 class TestImagesUsingOutputDir(PySparkTestCaseWithOutputDir):
@@ -134,7 +78,10 @@ class TestImagesUsingOutputDir(PySparkTestCaseWithOutputDir):
 
         images = ImagesLoader(self.sc).fromArrays(arys)
 
-        images.saveAsBinarySeries(outdir, groupingDim=groupingdim_)
+        slicesPerDim = [1]*arys[0].ndim
+        slicesPerDim[groupingdim_] = arys[0].shape[groupingdim_]
+        strategy = ImageBlocksPartitioningStrategy(splitsPerDim=slicesPerDim)
+        images.partition(strategy).saveAsBinarySeries(outdir)
 
         ndims = len(aryshape)
         # prevent padding to 4-byte boundaries: "=" specifies no alignment
@@ -187,7 +134,9 @@ class TestImagesUsingOutputDir(PySparkTestCaseWithOutputDir):
 
         outdir = os.path.join(self.outputdir, "anotherdir")
         os.mkdir(outdir)
-        assert_raises(ValueError, ImagesLoader(self.sc).fromArrays(arys).saveAsBinarySeries, outdir, 0)
+        dummystrat = ImageBlocksPartitioningStrategy(splitsPerDim=(1, 1, 1))
+        assert_raises(ValueError, ImagesLoader(self.sc).fromArrays(arys).partition(dummystrat)
+                      .saveAsBinarySeries, outdir)
 
         groupingdims = xrange(len(aryshape))
         dtypes = ('int16', 'int32', 'float32')
@@ -196,19 +145,6 @@ class TestImagesUsingOutputDir(PySparkTestCaseWithOutputDir):
         for idx, params in enumerate(paramiters):
             gd, dt = params
             self._run_tstSaveAsBinarySeries(idx, narys, dt, gd)
-
-
-class TestBlockMemoryAsSequence(unittest.TestCase):
-
-    def test_range(self):
-        dims = (2, 2)
-        undertest = _BlockMemoryAsReversedSequence(dims)
-
-        assert_equals(3, len(undertest))
-        assert_equals((2, 2), undertest.indtosub(0))
-        assert_equals((1, 2), undertest.indtosub(1))
-        assert_equals((1, 1), undertest.indtosub(2))
-        assert_raises(IndexError, undertest.indtosub, 3)
 
 
 if __name__ == "__main__":

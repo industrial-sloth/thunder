@@ -2,7 +2,7 @@ import itertools
 from numpy import arange, array_equal, concatenate, prod
 import unittest
 from nose.tools import assert_equals, assert_true, assert_almost_equal, assert_raises
-from thunder.rdds.imageblocks import ImageBlockValue
+from thunder.rdds.imageblocks import ImageBlockValue, _BlockMemoryAsReversedSequence
 
 
 class TestImageBlockValue(unittest.TestCase):
@@ -94,3 +94,14 @@ class TestImageBlockValue(unittest.TestCase):
             assert_equals(expected[0], actual[0])
             # check value equality
             assert_true(array_equal(expected[1], actual[1]))
+
+class TestBlockMemoryAsSequence(unittest.TestCase):
+    def test_range(self):
+        dims = (2, 2)
+        undertest = _BlockMemoryAsReversedSequence(dims)
+
+        assert_equals(3, len(undertest))
+        assert_equals((2, 2), undertest.indtosub(0))
+        assert_equals((1, 2), undertest.indtosub(1))
+        assert_equals((1, 1), undertest.indtosub(2))
+        assert_raises(IndexError, undertest.indtosub, 3)
