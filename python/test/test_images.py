@@ -47,6 +47,21 @@ class TestImages(PySparkTestCase):
 
         self.evaluate_series(arys, series, sz)
 
+    # TODO - failing!
+    # pack()'d array values are ordered differently from original array.
+    # was test case #5 on 2014.10.21
+    def test_toSeriesWithPack(self):
+        # another test of toSeries - this should be effectively the same as test_toSeries(), but with
+        # an additional pack().
+        rangeary = arange(64*128, dtype=dtype('uint16'))
+        rangeary.shape = (64, 128)
+        range_series_fromimage = ImagesLoader(self.sc).fromArrays([rangeary]).toSeries()
+        range_series_fromimage_ary = range_series_fromimage.pack()
+
+        assert_equals((64, 128), range_series_fromimage.dims.count)
+        assert_equals((64, 128), range_series_fromimage_ary.shape)
+        assert_true(array_equal(rangeary, range_series_fromimage_ary))  # TODO - failing
+
     def test_toSeriesBySlices(self):
         narys = 3
         arys, sh, sz = _generate_test_arrays(narys)
