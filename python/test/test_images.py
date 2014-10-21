@@ -33,8 +33,10 @@ class TestImages(PySparkTestCase):
 
     def evaluate_series(self, arys, series, sz):
         assert_equals(sz, len(series))
+        farys = [ary.flatten().reshape(ary.shape, order='F') for ary in arys]
         for serieskey, seriesval in series:
-            expectedval = array([ary[serieskey] for ary in arys], dtype='int16')
+            # expectedval = array([ary[serieskey] for ary in arys], dtype='int16')
+            expectedval = array([ary[serieskey] for ary in farys], dtype='int16')
             assert_true(array_equal(expectedval, seriesval))
 
     def test_toSeries(self):
@@ -47,8 +49,6 @@ class TestImages(PySparkTestCase):
 
         self.evaluate_series(arys, series, sz)
 
-    # TODO - failing!
-    # pack()'d array values are ordered differently from original array.
     # was test case #5 on 2014.10.21
     def test_toSeriesWithPack(self):
         # another test of toSeries - this should be effectively the same as test_toSeries(), but with
@@ -60,7 +60,7 @@ class TestImages(PySparkTestCase):
 
         assert_equals((64, 128), range_series_fromimage.dims.count)
         assert_equals((64, 128), range_series_fromimage_ary.shape)
-        assert_true(array_equal(rangeary, range_series_fromimage_ary))  # TODO - failing
+        assert_true(array_equal(rangeary, range_series_fromimage_ary))
 
     def test_toSeriesBySlices(self):
         narys = 3
@@ -83,6 +83,7 @@ class TestImages(PySparkTestCase):
         # create 3 arrays of 4x3x3 images (C-order), containing sequential integers
         narys = 3
         arys, sh, sz = _generate_test_arrays(narys)
+        farys = [ary.flatten().reshape(ary.shape, order='F') for ary in arys]
 
         grpdim = 0
         blocks = ImagesLoader(self.sc).fromArrays(arys) \
@@ -104,12 +105,14 @@ class TestImages(PySparkTestCase):
         for blockkey, blockplane in blocks:
             tpidx = blockplane.origslices[grpdim].start
             planeidx = blockkey[grpdim]
-            expectedplane = arys[tpidx][planeidx, :, :]
+            #expectedplane = arys[tpidx][planeidx, :, :]
+            expectedplane = farys[tpidx][planeidx, :, :]
             assert_true(array_equal(expectedplane, blockplane.values.squeeze()))
 
     def test_toBlocksBySlices(self):
         narys = 3
         arys, sh, sz = _generate_test_arrays(narys)
+        farys = [ary.flatten().reshape(ary.shape, order='F') for ary in arys]
 
         imagedata = ImagesLoader(self.sc).fromArrays(arys)
 
@@ -135,7 +138,8 @@ class TestImages(PySparkTestCase):
                 gatheredary[block.origslices] = block.values
 
             for i in xrange(narys):
-                assert_true(array_equal(arys[i], gatheredary[i]))
+                # assert_true(array_equal(arys[i], gatheredary[i]))
+                assert_true(array_equal(farys[i], gatheredary[i]))
 
 
 class TestImagesUsingOutputDir(PySparkTestCaseWithOutputDir):
@@ -145,6 +149,7 @@ class TestImagesUsingOutputDir(PySparkTestCaseWithOutputDir):
         """
         paramstr = "(groupingdim=%d, valuedtype='%s')" % (groupingdim_, valdtype)
         arys, aryshape, arysize = _generate_test_arrays(narys_, dtype=valdtype)
+        farys = [ary.flatten().reshape(ary.shape, order='F') for ary in arys]
         outdir = os.path.join(self.outputdir, "anotherdir%02d" % testidx)
 
         images = ImagesLoader(self.sc).fromArrays(arys)
@@ -178,8 +183,10 @@ class TestImagesUsingOutputDir(PySparkTestCaseWithOutputDir):
                     nkeys += 1
                     assert_equals(narys_, len(vals))
                     for validx, val in enumerate(vals):
-                        assert_equals(arys[validx][keys], val, "Expected %g, got %g, for test %d %s" %
-                                      (arys[validx][keys], val, testidx, paramstr))
+                        # assert_equals(arys[validx][keys], val, "Expected %g, got %g, for test %d %s" %
+                        #               (arys[validx][keys], val, testidx, paramstr))
+                        assert_equals(farys[validx][keys], val, "Expected %g, got %g, for test %d %s" %
+                                      (farys[validx][keys], val, testidx, paramstr))
                 assert_equals(expectednkeys, nkeys)
 
         confname = os.path.join(outdir, "conf.json")
