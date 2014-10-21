@@ -280,7 +280,10 @@ class SeriesLoader(object):
             pass
 
         # get dimensions
-        dims = (firstifd.getImageWidth(), firstifd.getImageHeight(), len(tiffheaders.ifds))
+        # dims = (firstifd.getImageWidth(), firstifd.getImageHeight(), len(tiffheaders.ifds))
+        # BEGIN test ---
+        dims = (firstifd.getImageHeight(), firstifd.getImageWidth(), len(tiffheaders.ifds))
+        # END test ---
 
         # get datatype
         bitspersample = firstifd.getBitsPerSample()
