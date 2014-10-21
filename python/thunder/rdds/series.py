@@ -468,13 +468,20 @@ class Series(Data):
 
         # reshape into a dense array of shape (b, x, y, z)  or (b, x, y) or (b, x)
         # where b is the number of outputs per record
-        out = asarray(result).reshape(((nout,) + self.dims.count)[::-1]).T
+        # out = asarray(result).reshape(((nout,) + self.dims.count)[::-1]).T
+
+        # BEGIN test ---
+        out = asarray(result).reshape(self.dims.count + (nout,))
+        # last dimension is time; put time as first dimension
+        permdims = [out.ndim-1] + range(out.ndim-1)  # e.g. [3, 0, 1, 2]
+        out = out.transpose(permdims)
+        # END test ---
 
         # flip xy for spatial data
-        if size(self.dims.count) == 3:  # (b, x, y, z) -> (b, y, x, z)
-            out = out.transpose([0, 2, 1, 3])
-        if size(self.dims.count) == 2:  # (b, x, y) -> (b, y, x)
-            out = out.transpose([0, 2, 1])
+        # if size(self.dims.count) == 3:  # (b, x, y, z) -> (b, y, x, z)
+        #     out = out.transpose([0, 2, 1, 3])
+        # if size(self.dims.count) == 2:  # (b, x, y) -> (b, y, x)
+        #     out = out.transpose([0, 2, 1])
 
         return out.squeeze()
 
