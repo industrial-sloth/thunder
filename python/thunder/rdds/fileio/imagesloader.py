@@ -39,7 +39,8 @@ class ImagesLoader(object):
                 raise ValueError("Arrays must all be of same data type; got both %s and %s" %
                                  (str(dtype), str(ary.dtype)))
 
-        return Images(self.sc.parallelize(enumerate(arrays), len(arrays)),
+        return Images(self.sc.parallelize(enumerate(arrays), len(arrays))
+                      .mapValues(lambda v: v.flatten().reshape(v.shape, order='F')),
                       dims=dims, dtype=str(dtype), nimages=len(arrays))
 
     def fromStack(self, datapath, dims, ext='stack', startidx=None, stopidx=None):
