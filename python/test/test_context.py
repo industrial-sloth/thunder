@@ -12,7 +12,7 @@ try:
     _have_image = True
 except ImportError:
     # PIL not available; skip tests that require it
-    pass
+    Image = None
 
 
 class TestContextLoading(PySparkTestCaseWithOutputDir):
@@ -97,7 +97,6 @@ class TestContextLoading(PySparkTestCaseWithOutputDir):
         assert_equals((60, 120), range_series_noshuffle_ary.shape)
         assert_true(np.array_equal(rangeary, range_series_noshuffle_ary))
 
-    # TODO - failing!
     @unittest.skipIf(not _have_image, "PIL/pillow not installed or not functional")
     def test_loadTifAsSeriesWithShuffle(self):
         tmpary = np.arange(60*120, dtype=np.dtype('uint16'))
@@ -113,7 +112,7 @@ class TestContextLoading(PySparkTestCaseWithOutputDir):
 
         assert_equals((60, 120, 1), range_series_shuffle.dims.count)
         assert_equals((60, 120), range_series_shuffle_ary.shape)
-        assert_true(np.array_equal(rangeary, range_series_shuffle_ary))  # TODO - failing
+        assert_true(np.array_equal(rangeary, range_series_shuffle_ary))
 
     @unittest.skipIf(not _have_image, "PIL/pillow not installed or not functional")
     def test_loadMultipleTifsAsSeriesNoShuffle(self):

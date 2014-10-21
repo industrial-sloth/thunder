@@ -13,19 +13,10 @@ from thunder.rdds.images import _BlockMemoryAsReversedSequence
 from test_utils import PySparkTestCase, PySparkTestCaseWithOutputDir
 
 
-_have_image = False
-try:
-    from PIL import Image
-    _have_image = True
-except ImportError:
-    # PIL not available; skip tests that require it
-    pass
-
-
-def _generate_test_arrays(narys, dtype='int16'):
+def _generate_test_arrays(narys, dtype_='int16'):
     sh = 4, 3, 3
     sz = prod(sh)
-    arys = [arange(i, i+sz, dtype=dtype).reshape(sh) for i in xrange(0, sz * narys, sz)]
+    arys = [arange(i, i+sz, dtype=dtype(dtype_)).reshape(sh) for i in xrange(0, sz * narys, sz)]
     return arys, sh, sz
 
 
@@ -35,7 +26,6 @@ class TestImages(PySparkTestCase):
         assert_equals(sz, len(series))
         farys = [ary.flatten().reshape(ary.shape, order='F') for ary in arys]
         for serieskey, seriesval in series:
-            # expectedval = array([ary[serieskey] for ary in arys], dtype='int16')
             expectedval = array([ary[serieskey] for ary in farys], dtype='int16')
             assert_true(array_equal(expectedval, seriesval))
 
@@ -49,7 +39,6 @@ class TestImages(PySparkTestCase):
 
         self.evaluate_series(arys, series, sz)
 
-    # was test case #5 on 2014.10.21
     def test_toSeriesWithPack(self):
         # another test of toSeries - this should be effectively the same as test_toSeries(), but with
         # an additional pack().
@@ -105,7 +94,6 @@ class TestImages(PySparkTestCase):
         for blockkey, blockplane in blocks:
             tpidx = blockplane.origslices[grpdim].start
             planeidx = blockkey[grpdim]
-            #expectedplane = arys[tpidx][planeidx, :, :]
             expectedplane = farys[tpidx][planeidx, :, :]
             assert_true(array_equal(expectedplane, blockplane.values.squeeze()))
 
@@ -138,7 +126,6 @@ class TestImages(PySparkTestCase):
                 gatheredary[block.origslices] = block.values
 
             for i in xrange(narys):
-                # assert_true(array_equal(arys[i], gatheredary[i]))
                 assert_true(array_equal(farys[i], gatheredary[i]))
 
 
@@ -148,7 +135,7 @@ class TestImagesUsingOutputDir(PySparkTestCaseWithOutputDir):
         """Pseudo-parameterized test fixture, allows reusing existing spark context
         """
         paramstr = "(groupingdim=%d, valuedtype='%s')" % (groupingdim_, valdtype)
-        arys, aryshape, arysize = _generate_test_arrays(narys_, dtype=valdtype)
+        arys, aryshape, arysize = _generate_test_arrays(narys_, dtype_=valdtype)
         farys = [ary.flatten().reshape(ary.shape, order='F') for ary in arys]
         outdir = os.path.join(self.outputdir, "anotherdir%02d" % testidx)
 
@@ -183,8 +170,6 @@ class TestImagesUsingOutputDir(PySparkTestCaseWithOutputDir):
                     nkeys += 1
                     assert_equals(narys_, len(vals))
                     for validx, val in enumerate(vals):
-                        # assert_equals(arys[validx][keys], val, "Expected %g, got %g, for test %d %s" %
-                        #               (arys[validx][keys], val, testidx, paramstr))
                         assert_equals(farys[validx][keys], val, "Expected %g, got %g, for test %d %s" %
                                       (farys[validx][keys], val, testidx, paramstr))
                 assert_equals(expectednkeys, nkeys)
@@ -231,11 +216,3 @@ class TestBlockMemoryAsSequence(unittest.TestCase):
         assert_equals((1, 2), undertest.indtosub(1))
         assert_equals((1, 1), undertest.indtosub(2))
         assert_raises(IndexError, undertest.indtosub, 3)
-
-
-if __name__ == "__main__":
-    if not _have_image:
-        print "NOTE: Skipping PIL/pillow tests as neither seem to be installed and functional"
-    unittest.main()
-    if not _have_image:
-        print "NOTE: PIL/pillow tests were skipped as neither seem to be installed and functional"
