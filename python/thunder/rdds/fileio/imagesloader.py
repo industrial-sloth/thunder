@@ -38,9 +38,9 @@ class ImagesLoader(object):
             if not ary.dtype == dtype:
                 raise ValueError("Arrays must all be of same data type; got both %s and %s" %
                                  (str(dtype), str(ary.dtype)))
-
+        # reorder array to be consistent with fortran ordering assumed by toSeries conversion
         return Images(self.sc.parallelize(enumerate(arrays), len(arrays))
-                      .mapValues(lambda v: v.flatten().reshape(v.shape, order='F')),
+                      .mapValues(lambda v: v.ravel().reshape(v.shape, order='F')),
                       dims=dims, dtype=str(dtype), nimages=len(arrays))
 
     def fromStack(self, datapath, dims, ext='stack', startidx=None, stopidx=None):
@@ -80,6 +80,21 @@ class ImagesLoader(object):
         readerrdd = reader.read(datapath, ext=ext, startidx=startidx, stopidx=stopidx)
         return Images(readerrdd.mapValues(toArray), nimages=reader.lastnrecs, dims=dims, dtype='int16')
 
+    @staticmethod
+    def _reorderChannels(imgary):
+        """
+        Reshape each channel (z-plane) of image array input independently into Fortran order
+        """
+        if imgary.ndim <= 2:
+            return imgary.ravel().reshape(imgary.shape, order='F')
+            # reorder each image plane individually image planes if > 1:
+        farys = []
+        planeshape = (imgary.shape[0], imgary.shape[1])
+        for cplaneidx in xrange(imgary.shape[2]):
+            fplane = imgary[:, :, cplaneidx].ravel().reshape(planeshape, order='F')
+            farys.append(fplane)
+        return dstack(farys)
+
     def fromTif(self, datapath, ext='tif', startidx=None, stopidx=None):
         """Load an Images object stored in a directory of (single-page) tif files
 
@@ -102,7 +117,8 @@ class ImagesLoader(object):
         """
         def readTifFromBuf(buf):
             fbuf = BytesIO(buf)
-            return imread(fbuf, format='tif')
+            cary = imread(fbuf, format='tif')
+            return ImagesLoader._reorderChannels(cary)
 
         reader = getParallelReaderForPath(datapath)(self.sc)
         readerrdd = reader.read(datapath, ext=ext, startidx=startidx, stopidx=stopidx)
@@ -140,7 +156,11 @@ class ImagesLoader(object):
             while True:
                 try:
                     multipage.seek(pageidx)
-                    imgarys.append(pil_to_array(multipage))
+                    # imgarys.append(pil_to_array(multipage))
+                    # reorder array to be consistent with fortran ordering assumed by toSeries conversion
+                    cary = pil_to_array(multipage)
+                    fary = ImagesLoader._reorderChannels(cary)
+                    imgarys.append(fary)
                     pageidx += 1
                 except EOFError:
                     # past last page in tif
@@ -173,7 +193,8 @@ class ImagesLoader(object):
         """
         def readPngFromBuf(buf):
             fbuf = BytesIO(buf)
-            return imread(fbuf, format='png')
+            cary = imread(fbuf, format='png')
+            return ImagesLoader._reorderChannels(cary)
 
         reader = getParallelReaderForPath(datafile)(self.sc)
         readerrdd = reader.read(datafile, ext=ext, startidx=startidx, stopidx=stopidx)
