@@ -356,7 +356,12 @@ class SeriesLoader(object):
                         planeshape = ary.shape[:]
                         blockstart = blockidx * blocklen
                         blockend = min(blockstart+blocklen, planeshape[0]*planeshape[1])
-                    blocks.append(ary.flatten(order='C')[blockstart:blockend])
+                    ary = ary.T.reshape(planeshape, order='F')
+                    blocks.append(ary.ravel()[blockstart:blockend])
+                    #blocks.append(ary.flatten(order='C')[blockstart:blockend])
+                    #blocks.append(ary.flatten(order='F')[blockstart:blockend])
+                    #blocks.append(ary.T.flatten(order='F')[blockstart:blockend])
+                    #blocks.append(ary.T.flatten(order='C')[blockstart:blockend])
                     del ary
                 finally:
                     fp.close()
@@ -367,9 +372,11 @@ class SeriesLoader(object):
             # append subscript keys based on dimensions
             linindx = arange(blockstart, blockend)  # zero-based
 
-            serieskeys = zip(*map(tuple, unravel_index(linindx, planeshape, order='C')))
+            # serieskeys = zip(*map(tuple, unravel_index(linindx, planeshape, order='C')))
+            serieskeys = zip(*map(tuple, unravel_index(linindx, planeshape, order='F')))
             # add plane index to end of keys
-            serieskeys = [tuple(list(keys_)[::-1]+[planeidx]) for keys_ in serieskeys]
+            # serieskeys = [tuple(list(keys_)[::-1]+[planeidx]) for keys_ in serieskeys]
+            serieskeys = [tuple(list(keys_)+[planeidx]) for keys_ in serieskeys]
             return zip(serieskeys, buf)
 
         # map over blocks
