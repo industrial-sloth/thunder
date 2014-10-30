@@ -64,7 +64,9 @@ class Images(Data):
         partitioningStrategy.setImages(self)
         returntype = partitioningStrategy.getPartitionedImagesClass()
         vals = self.rdd.flatMap(partitioningStrategy.partitionFunction, preservesPartitioning=False)
-        groupedvals = vals.groupByKey(numPartitions=partitioningStrategy.npartitions)
+        # fastest changing dimension (e.g. x) is first, so must sort reversed keys to get desired ordering
+        # sort must come after group, b/c group will mess with ordering.
+        groupedvals = vals.groupByKey(numPartitions=partitioningStrategy.npartitions).sortBy(lambda (k, _): k[::-1])
         blockedvals = groupedvals.mapValues(partitioningStrategy.blockingFunction)
         return returntype(blockedvals, self.dims, self.nimages, self.dtype)
 

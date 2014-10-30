@@ -75,7 +75,8 @@ class TestImages(PySparkTestCase):
         ary = arange(8, dtype=dtype('int16')).reshape((2, 4))
 
         image = ImagesLoader(self.sc).fromArrays(ary)
-        series = image.toSeries()
+        strategy = ImageBlocksPartitioningStrategy.generateFromBlockSize("150M", ary.shape, 1, ary.dtype)
+        series = image.partition(strategy).toSeries()
 
         seriesvals = series.collect()
         seriesary = series.pack()
@@ -107,7 +108,8 @@ class TestImages(PySparkTestCase):
         ary = arange(24, dtype=dtype('int16')).reshape((3, 4, 2))
 
         image = ImagesLoader(self.sc).fromArrays(ary)
-        series = image.toSeries()
+        strategy = ImageBlocksPartitioningStrategy.generateFromBlockSize("150M", ary.shape, 1, ary.dtype)
+        series = image.partition(strategy).toSeries()
 
         seriesvals = series.collect()
         seriesary = series.pack()
@@ -154,7 +156,8 @@ class TestImages(PySparkTestCase):
         ary = arange(8, dtype=dtype('int16')).reshape((4, 2))
 
         image = ImagesLoader(self.sc).fromArrays(ary)
-        series = image.toSeries(splitsPerDim=(1, 2))
+        strategy = ImageBlocksPartitioningStrategy(splitsPerDim=(1, 2))
+        series = image.partition(strategy).toSeries()
 
         seriesvals = series.collect()
         seriesary = series.pack()
@@ -183,7 +186,8 @@ class TestImages(PySparkTestCase):
         ary = arange(8, dtype=dtype('int16')).reshape((4, 2))
 
         image = ImagesLoader(self.sc).fromArrays(ary)
-        series = image.toSeries(splitsPerDim=(2, 1))
+        strategy = ImageBlocksPartitioningStrategy(splitsPerDim=(2, 1))
+        series = image.partition(strategy).toSeries()
 
         seriesvals = series.collect()
         seriesary = series.pack(sorting=True)
@@ -215,8 +219,8 @@ class TestImages(PySparkTestCase):
         ary = arange(8, dtype=dtype('int16')).reshape((2, 4))
 
         image = ImagesLoader(self.sc).fromArrays(ary)
-        blocks = image._scatterToBlocks(blocksPerDim=(1, 2))
-        groupedblocks = blocks._groupIntoSeriesBlocks()
+        strategy = ImageBlocksPartitioningStrategy(splitsPerDim=(1, 2))
+        groupedblocks = image.partition(strategy)
 
         # collectedblocks = blocks.collect()
         collectedgroupedblocks = groupedblocks.collect()
@@ -337,10 +341,15 @@ class TestImagesUsingOutputDir(PySparkTestCaseWithOutputDir):
         outdir = os.path.join(self.outputdir, "fish-series-dir")
 
         images = ImagesLoader(self.sc).fromMultipageTif(imagepath)
-        series = images.toSeries(blockSize=76*20)
+        strategy = ImageBlocksPartitioningStrategy.generateFromBlockSize(blockSize=76*20,
+                                                                         dims=images.dims.count,
+                                                                         nimages=images.nimages,
+                                                                         datatype=images.dtype)
+        partitionedimages = images.partition(strategy)
+        series = partitionedimages.toSeries()
         series_ary = series.pack()
 
-        images.saveAsBinarySeries(outdir, blockSize=76*20)
+        partitionedimages.saveAsBinarySeries(outdir)
         converted_series = SeriesLoader(self.sc).fromBinary(outdir)
         converted_series_ary = converted_series.pack()
 
@@ -354,7 +363,8 @@ class TestImagesUsingOutputDir(PySparkTestCaseWithOutputDir):
         ary.tofile(filename)
 
         image = ImagesLoader(self.sc).fromStack(filename, dims=(4, 2))
-        series = image.toSeries()
+        strategy = ImageBlocksPartitioningStrategy.generateFromBlockSize("150M", (4, 2), 1, ary.dtype)
+        series = image.partition(strategy).toSeries()
 
         seriesvals = series.collect()
         seriesary = series.pack()

@@ -56,7 +56,11 @@ class ImageBlocksPartitioningStrategy(PartitioningStrategy):
         """
         import bisect
         from numpy import dtype
+        from thunder.utils.common import parseMemoryString
         minseriessize = nimages * dtype(datatype).itemsize
+
+        if isinstance(blockSize, basestring):
+            blockSize = parseMemoryString(blockSize)
 
         memseq = _BlockMemoryAsReversedSequence(dims)
         tmpidx = bisect.bisect_left(memseq, blockSize / float(minseriessize))
@@ -169,7 +173,7 @@ class ImageBlocks(PartitionedImages):
             # # blockKey here is in numpy order (reversed from series convention)
             # # reverse again to get correct filename, for correct sorting of files downstream
             # label = ImageBlocks.getBinarySeriesNameForKey(reversed(blockKey))
-            label = ImageBlocks.getBinarySeriesNameForKey(blockKey)
+            label = ImageBlocks.getBinarySeriesNameForKey(blockKey)+".bin"
             keypacker = None
             buf = StringIO.StringIO()
             for seriesKey, series in ImageBlocks._blockToSeries(blockVal, seriesDim):
