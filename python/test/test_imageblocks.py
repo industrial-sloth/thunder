@@ -2,13 +2,13 @@ import itertools
 from numpy import arange, array, array_equal, concatenate, dtype, prod
 import unittest
 from nose.tools import assert_equals, assert_true, assert_almost_equal, assert_raises
-from thunder.rdds.imageblocks import ImageBlockValue
+from thunder.rdds.imageblocks import ImageBlockValue, _BlockMemoryAsReversedSequence
 
 
 class TestImageBlockValue(unittest.TestCase):
 
     def test_fromArrayByPlane(self):
-        values = arange(12, dtype='int16').reshape((3, 4), order='C')
+        values = arange(12, dtype=dtype('int16')).reshape((3, 4), order='C')
 
         planedim = 0
         planedimidx = 1
@@ -20,7 +20,7 @@ class TestImageBlockValue(unittest.TestCase):
         assert_true(array_equal(values[planedimidx, :].flatten(order='C'), imageblock.values.flatten(order='C')))
 
     def test_fromArrayBySlices(self):
-        values = arange(12, dtype='int16').reshape((3, 4), order='C')
+        values = arange(12, dtype=dtype('int16')).reshape((3, 4), order='C')
 
         slices = [[slice(0, 3)], [slice(0, 2), slice(2, 4)]]
         slicesiter = itertools.product(*slices)
@@ -31,7 +31,7 @@ class TestImageBlockValue(unittest.TestCase):
         assert_true(array_equal(values[(slice(0, 3), slice(0, 2))], imageblocks[0].values))
 
     def test_fromPlanarBlocks(self):
-        values = arange(36, dtype='int16').reshape((3, 4, 3), order='F')
+        values = arange(36, dtype=dtype('int16')).reshape((3, 4, 3), order='F')
 
         imageblocks = [ImageBlockValue.fromArrayByPlane(values, -1, i) for i in xrange(values.shape[2])]
 
@@ -42,8 +42,8 @@ class TestImageBlockValue(unittest.TestCase):
         assert_equals(values.shape, recombblock.origshape)
 
     def test_addDimension(self):
-        values = arange(12, dtype='int16').reshape((3, 4), order='C')
-        morevalues = arange(12, 24, dtype='int16').reshape((3, 4), order='C')
+        values = arange(12, dtype=dtype('int16')).reshape((3, 4), order='C')
+        morevalues = arange(12, 24, dtype=dtype('int16')).reshape((3, 4), order='C')
 
         origshape = values.shape
         origslices = [slice(None)] * values.ndim
@@ -70,13 +70,13 @@ class TestImageBlockValue(unittest.TestCase):
         assert_equals(expectedshape, anotherimageblock.values.shape)
 
         # check that straight array concatenation works as expected in this particular case
-        expectedcatvals = arange(24, dtype='int16')
+        expectedcatvals = arange(24, dtype=dtype('int16'))
         actualcatvals = concatenate((imageblock.values, anotherimageblock.values), axis=0).flatten(order='C')
         assert_true(array_equal(expectedcatvals, actualcatvals))
 
     def test_toSeriesIter(self):
         sh = 2, 3, 4
-        sz = prod(sh)
+        sz = int(prod(sh))
         ary = arange(sz, dtype=dtype('int16')).reshape(sh)
         imageblock = ImageBlockValue.fromArray(ary)
 
@@ -120,3 +120,15 @@ class TestImageBlockValue(unittest.TestCase):
         # check that values are in original order
         collectedvals = array([kv[1] for kv in seriesvals], dtype=dtype('int16')).ravel()
         assert_true(array_equal(ary.ravel(order='F'), collectedvals))
+
+
+class TestBlockMemoryAsSequence(unittest.TestCase):
+    def test_range(self):
+        dims = (2, 2)
+        undertest = _BlockMemoryAsReversedSequence(dims)
+
+        assert_equals(3, len(undertest))
+        assert_equals((2, 2), undertest.indtosub(0))
+        assert_equals((1, 2), undertest.indtosub(1))
+        assert_equals((1, 1), undertest.indtosub(2))
+        assert_raises(IndexError, undertest.indtosub, 3)

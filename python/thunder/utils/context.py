@@ -1,7 +1,5 @@
 """ Simple wrapper for a Spark Context to provide loading functionality """
 
-from numpy import asarray, floor, ceil
-
 from thunder.utils.datasets import DataSets
 from thunder.utils.common import checkparams
 
@@ -348,13 +346,18 @@ class ThunderContext():
 
         if shuffle:
             from thunder.rdds.fileio.imagesloader import ImagesLoader
+            from thunder.rdds.imageblocks import ImageBlocksPartitioningStrategy
             loader = ImagesLoader(self._sc)
             if inputformat.lower() == 'stack':
-                loader.fromStack(datapath, dims, dtype=dtype, startidx=startidx, stopidx=stopidx)\
-                    .saveAsBinarySeries(outputdirpath, blockSize=blocksize, overwrite=overwrite)
+                images = loader.fromStack(datapath, dims, dtype=dtype, startidx=startidx, stopidx=stopidx)
             else:
-                loader.fromMultipageTif(datapath, startidx=startidx, stopidx=stopidx)\
-                    .saveAsBinarySeries(outputdirpath, blockSize=blocksize, overwrite=overwrite)
+                images = loader.fromMultipageTif(datapath, startidx=startidx, stopidx=stopidx)
+            strategy = ImageBlocksPartitioningStrategy.generateFromBlockSize(blockSize=blocksize,
+                                                                             dims=images.dims,
+                                                                             nimages=images.nimages,
+                                                                             datatype=images.dtype)
+            blocks = images.partition(strategy)
+            blocks.saveAsBinarySeries(outputdirpath, overwrite=overwrite)
         else:
             from thunder.rdds.fileio.seriesloader import SeriesLoader
             loader = SeriesLoader(self._sc)
@@ -432,14 +435,15 @@ class ThunderContext():
         params : Tuple or numpy array
             Parameters or metadata for dataset
         """
-
+        from numpy import asarray
         import json
 
         if 'ec' not in self._sc.master:
             raise Exception("must be running on EC2 to load this example data sets")
         elif dataset == "zebrafish-optomotor-response":
             path = 'zebrafish.datasets/optomotor-response/1/'
-            data = self.loadSeries("s3n://" + path + 'data/dat_plane*.txt', inputformat='text', minPartitions=1000, nkeys=3)
+            data = self.loadSeries("s3n://" + path + 'data/dat_plane*.txt', inputformat='text',
+                                   minPartitions=1000, nkeys=3)
             paramfile = self._sc.textFile("s3n://" + path + "params.json")
             params = json.loads(paramfile.first())
             modelfile = asarray(params['trials'])
