@@ -1,5 +1,4 @@
 """ Simple wrapper for a Spark Context to provide loading functionality """
-
 from thunder.utils.datasets import DataSets
 from thunder.utils.common import checkparams
 
@@ -237,14 +236,18 @@ class ThunderContext():
 
         if shuffle:
             from thunder.rdds.fileio.imagesloader import ImagesLoader
+            from thunder.rdds.imageblocks import ImageBlocksPartitioningStrategy
             loader = ImagesLoader(self._sc)
             if inputformat.lower() == 'stack':
-                return loader.fromStack(datapath, dims, dtype=dtype, startidx=startidx, stopidx=stopidx)\
-                    .toSeries(blockSize=blockSize)
+                images = loader.fromStack(datapath, dims, dtype=dtype, startidx=startidx, stopidx=stopidx)
+                strategy = ImageBlocksPartitioningStrategy.generateFromBlockSize(blockSize, dims,
+                                                                                 images.nimages, dtype)
             else:
                 # tif stack
-                return loader.fromMultipageTif(datapath, startidx=startidx, stopidx=stopidx)\
-                    .toSeries(blockSize=blockSize)
+                images = loader.fromMultipageTif(datapath, startidx=startidx, stopidx=stopidx)
+                strategy = ImageBlocksPartitioningStrategy.generateFromBlockSize(blockSize, images.dims,
+                                                                                 images.nimages, images.dtype)
+            return images.partition(strategy).toSeries()
 
         else:
             from thunder.rdds.fileio.seriesloader import SeriesLoader
@@ -350,14 +353,17 @@ class ThunderContext():
             loader = ImagesLoader(self._sc)
             if inputformat.lower() == 'stack':
                 images = loader.fromStack(datapath, dims, dtype=dtype, startidx=startidx, stopidx=stopidx)
+                strategy = ImageBlocksPartitioningStrategy.generateFromBlockSize(blockSize=blocksize,
+                                                                                 dims=dims,
+                                                                                 nimages=images.nimages,
+                                                                                 datatype=dtype)
             else:
                 images = loader.fromMultipageTif(datapath, startidx=startidx, stopidx=stopidx)
-            strategy = ImageBlocksPartitioningStrategy.generateFromBlockSize(blockSize=blocksize,
-                                                                             dims=images.dims,
-                                                                             nimages=images.nimages,
-                                                                             datatype=images.dtype)
-            blocks = images.partition(strategy)
-            blocks.saveAsBinarySeries(outputdirpath, overwrite=overwrite)
+                strategy = ImageBlocksPartitioningStrategy.generateFromBlockSize(blockSize=blocksize,
+                                                                                 dims=images.dims,
+                                                                                 nimages=images.nimages,
+                                                                                 datatype=images.dtype)
+            images.partition(strategy).saveAsBinarySeries(outputdirpath, overwrite=overwrite)
         else:
             from thunder.rdds.fileio.seriesloader import SeriesLoader
             loader = SeriesLoader(self._sc)
