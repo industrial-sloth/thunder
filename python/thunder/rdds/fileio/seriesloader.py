@@ -670,7 +670,7 @@ def writeSeriesConfig(outputdirname, nkeys, nvalues, dims=None, keytype='int16',
             'nkeys': nkeys, 'nvalues': nvalues,
             'valuetype': str(valuetype), 'keytype': str(keytype)}
     if dims:
-        conf["dims"] = dims.count
+        conf["dims"] = dims
 
     confwriter = filewriterclass(outputdirname, confname, overwrite=overwrite)
     confwriter.writeFile(json.dumps(conf, indent=2))

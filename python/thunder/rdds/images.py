@@ -380,5 +380,5 @@ class PartitionedImages(Data):
         binseriesrdd = self.toBinarySeries()
 
         binseriesrdd.foreach(writer.writerFcn)
-        writeSeriesConfig(outputdirname, len(self.dims), self.nimages, dims=self.dims,
+        writeSeriesConfig(outputdirname, len(self.dims), self.nimages, dims=self.dims.count,
                           keytype='int16', valuetype=self.dtype, overwrite=overwrite)
