@@ -7,7 +7,6 @@ import struct
 from thunder.rdds.keys import Dimensions
 from thunder.rdds.data import NumpyArrayAttributeData, NumpyArrayAttributeDataValue
 from thunder.rdds.images import PartitioningStrategy, PartitionedImages
-from thunder.rdds.series import Series
 
 
 class ImageBlocksPartitioningStrategy(PartitioningStrategy):
@@ -162,11 +161,20 @@ class ImageBlocks(NumpyArrayAttributeData, PartitionedImages):
             yield tuple(seriesKey), seriesVal
 
     def toSeries(self, seriesDim=0):
+        from thunder.rdds.series import Series
         # returns generator of (z, y, x) array data for all z, y, x
         seriesrdd = self.rdd.flatMap(lambda kv: ImageBlocks._blockToSeries(kv[1], seriesDim))
 
         idx = arange(self._nimages) if self._nimages else None
         return Series(seriesrdd, index=idx, dims=self.dims, dtype=self.dtype)
+
+    def toImages(self, seriesDim=0):
+        from thunder.rdds.images import Images
+        timerdd = self.rdd.flatMap(lambda (k, v): v.toPlanarBlocks(planarDim=seriesDim))
+        squeezedrdd = timerdd.mapValues(lambda v: v.removeDimension(squeezeDim=seriesDim))
+        timesortedrdd = squeezedrdd.groupByKey().sortByKey()
+        imagesrdd = timesortedrdd.mapValues(ImageBlockValue.toArray)
+        return Images(imagesrdd, dims=self._dims, nimages=self._nimages, dtype=self._dtype)
 
     @staticmethod
     def getBinarySeriesNameForKey(blockKey):
@@ -279,6 +287,17 @@ class ImageBlockValue(NumpyArrayAttributeDataValue):
         return cls(imagearray.shape, tuple(slices), slicedary)
 
     @classmethod
+    def toArray(cls, blocksIter):
+        """Creates a new array from an iterator over spatially-compatible IBVs
+        """
+        ary = None
+        for block in blocksIter:
+            if ary is None:
+                ary = zeros(block.origshape, dtype=block.values.dtype)
+            ary[block.origslices] = block.values
+        return ary
+
+    @classmethod
     def fromPlanarBlocks(cls, blocksIter, planarDim):
         """Creates a new ImageBlockValue from an iterator over IBVs that have at least one singleton dimension.
 
@@ -353,6 +372,25 @@ class ImageBlockValue(NumpyArrayAttributeDataValue):
 
         return cls(block.origshape, newslices, ary)
 
+    def toPlanarBlocks(self, planarDim=0):
+        """Generator function that yields an iteration over (timepoint, ImageBlockValue)
+        pairs.
+
+        TODO: make fromPlanarBlocks a more precise inverse of this function.
+        """
+        planarrange = self.getXRange(planarDim)
+        for aryidx, tpidx in enumerate(planarrange):
+            # set up new slices:
+            newslices = self.origslices[:]
+            tpslice = slice(tpidx, tpidx+1, 1)
+            newslices[planarDim] = tpslice
+            # new array value:
+            aryslices = [slice(None)] * self._values.ndim
+            aryslices[planarDim] = slice(aryidx, aryidx+1, 1)
+            newval = self._values[aryslices]
+            newblock = ImageBlockValue(self.origshape, newslices, newval)
+            yield tpidx, newblock
+
     def addDimension(self, newdimidx=0, newdimsize=1):
         """Returns a new ImageBlockValue embedded in a space of dimension n+1
 
@@ -393,6 +431,21 @@ class ImageBlockValue(NumpyArrayAttributeDataValue):
         newblockshape.insert(0, 1)
         newvalues = reshape(self.values, tuple(newblockshape))
         return type(self)(tuple(newshape), tuple(newslices), newvalues)
+
+    def removeDimension(self, squeezeDim=0):
+        newshape = list(self.origshape)
+        del newshape[squeezeDim]
+        newslices = list(self.origslices)
+        del newslices[squeezeDim]
+        newary = self._values.squeeze(squeezeDim)  # will throw error here if squeezeDim is not singleton
+        return ImageBlockValue(tuple(newshape), tuple(newslices), newary)
+
+    def getXRange(self, dim):
+        sl = self.origslices[dim]
+        stop = self.origshape[dim] if sl.stop is None else sl.stop
+        start = 0 if sl.start is None else sl.start
+        step = 1 if sl.step is None else sl.step
+        return xrange(start, stop, step)
 
     def toSeriesIter(self, seriesDim=0):
         """Returns an iterator over key,array pairs suitable for casting into a Series object.

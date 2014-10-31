@@ -28,6 +28,14 @@ def _generate_test_arrays(narys, dtype_='int16'):
     return arys, sh, sz
 
 
+def findSourceTreeDir(dirname="utils/data"):
+    testdirpath = os.path.dirname(os.path.realpath(__file__))
+    testresourcesdirpath = os.path.join(testdirpath, "..", "thunder", dirname)
+    if not os.path.isdir(testresourcesdirpath):
+        raise IOError("Directory "+testresourcesdirpath+" not found")
+    return testresourcesdirpath
+
+
 class TestImages(PySparkTestCase):
 
     def evaluate_series(self, arys, series, sz):
@@ -231,6 +239,18 @@ class TestImages(PySparkTestCase):
 
             self.evaluate_series(arys, series, sz)
 
+    def test_roundtripThroughBlocks(self):
+        imagepath = findSourceTreeDir("utils/data/fish/tif-stack")
+        images = ImagesLoader(self.sc).fromMultipageTif(imagepath)
+        strategy = ImageBlocksPartitioningStrategy((2, 2, 2))
+        partitionedimages = images.partition(strategy)
+        recombinedimages = partitionedimages.toImages()
+
+        collectedimages = images.collect()
+        roundtrippedimages = recombinedimages.collect()
+        for orig, roundtripped in zip(collectedimages, roundtrippedimages):
+            assert_true(array_equal(orig[1], roundtripped[1]))
+
 
 class TestImagesStats(PySparkTestCase):
     def test_mean(self):
@@ -308,14 +328,6 @@ class TestImagesStats(PySparkTestCase):
 
 
 class TestImagesUsingOutputDir(PySparkTestCaseWithOutputDir):
-
-    @staticmethod
-    def _findSourceTreeDir(dirname="utils/data"):
-        testdirpath = os.path.dirname(os.path.realpath(__file__))
-        testresourcesdirpath = os.path.join(testdirpath, "..", "thunder", dirname)
-        if not os.path.isdir(testresourcesdirpath):
-            raise IOError("Directory "+testresourcesdirpath+" not found")
-        return testresourcesdirpath
 
     def _run_tstSaveAsBinarySeries(self, testidx, narys_, valdtype, groupingdim_):
         """Pseudo-parameterized test fixture, allows reusing existing spark context
@@ -396,7 +408,7 @@ class TestImagesUsingOutputDir(PySparkTestCaseWithOutputDir):
             self._run_tstSaveAsBinarySeries(idx, narys, dt, gd)
 
     def test_roundtripConvertToSeries(self):
-        imagepath = TestImagesUsingOutputDir._findSourceTreeDir("utils/data/fish/tif-stack")
+        imagepath = findSourceTreeDir("utils/data/fish/tif-stack")
         outdir = os.path.join(self.outputdir, "fish-series-dir")
 
         images = ImagesLoader(self.sc).fromMultipageTif(imagepath)
