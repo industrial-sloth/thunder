@@ -44,22 +44,6 @@ class TestImages(PySparkTestCase):
         assert_equals('float16', str(castdata.dtype))
         assert_equals('float16', str(castdata.first()[1].dtype))
 
-    def test_mean(self):
-        from numpy import mean
-        arys, shape, size = _generate_test_arrays(2, 'uint8')
-        imagedata = ImagesLoader(self.sc).fromArrays(arys)
-        meanval = imagedata.mean()
-
-        def elementwise_mean(arys):
-            # surprising that numpy doesn't have this built in?
-            combined = vstack([ary.ravel() for ary in arys])
-            meanary = mean(combined, axis=0)
-            return meanary.reshape(arys[0].shape)
-
-        expected = elementwise_mean(arys).astype('float16')
-        assert_true(allclose(expected, meanval))
-        assert_equals('float16', str(meanval.dtype))
-
     def test_toSeries(self):
         # create 3 arrays of 4x3x3 images (C-order), containing sequential integers
         narys = 3
@@ -246,6 +230,81 @@ class TestImages(PySparkTestCase):
             series = imagedata.partition(strategy).toSeries().collect()
 
             self.evaluate_series(arys, series, sz)
+
+
+class TestImagesStats(PySparkTestCase):
+    def test_mean(self):
+        from test_utils import elementwise_mean
+        arys, shape, size = _generate_test_arrays(2, 'uint8')
+        imagedata = ImagesLoader(self.sc).fromArrays(arys)
+        meanval = imagedata.mean()
+
+        expected = elementwise_mean(arys).astype('float16')
+        assert_true(allclose(expected, meanval))
+        assert_equals('float16', str(meanval.dtype))
+
+    def test_sum(self):
+        from numpy import add
+        arys, shape, size = _generate_test_arrays(2, 'uint8')
+        imagedata = ImagesLoader(self.sc).fromArrays(arys)
+        sumval = imagedata.sum(dtype='uint32')
+
+        arys = [ary.astype('uint32') for ary in arys]
+        expected = reduce(add, arys)
+        assert_true(array_equal(expected, sumval))
+        assert_equals('uint32', str(sumval.dtype))
+
+    def test_variance(self):
+        from test_utils import elementwise_var
+        arys, shape, size = _generate_test_arrays(2, 'uint8')
+        imagedata = ImagesLoader(self.sc).fromArrays(arys)
+        varval = imagedata.variance()
+
+        expected = elementwise_var([ary.astype('float16') for ary in arys])
+        assert_true(allclose(expected, varval))
+        assert_equals('float16', str(varval.dtype))
+
+    def test_stdev(self):
+        from test_utils import elementwise_stdev
+        arys, shape, size = _generate_test_arrays(2, 'uint8')
+        imagedata = ImagesLoader(self.sc).fromArrays(arys)
+        stdval = imagedata.stdev()
+
+        expected = elementwise_stdev([ary.astype('float16') for ary in arys])
+        assert_true(allclose(expected, stdval))
+        #assert_equals('float16', str(stdval.dtype))
+        # it isn't clear to me why this comes out as float32 and not float16, especially
+        # given that var returns float16, as expected. But I'm not too concerned about it.
+        # Consider this documentation of current behavior rather than a description of
+        # desired behavior.
+        assert_equals('float32', str(stdval.dtype))
+
+    def test_stats(self):
+        from test_utils import elementwise_mean, elementwise_var
+        arys, shape, size = _generate_test_arrays(2, 'uint8')
+        imagedata = ImagesLoader(self.sc).fromArrays(arys)
+        statsval = imagedata.stats()
+
+        floatarys = [ary.astype('float16') for ary in arys]
+        # StatsCounter contains a few different measures, only test a couple:
+        expectedmean = elementwise_mean(floatarys)
+        expectedvar = elementwise_var(floatarys)
+        assert_true(allclose(expectedmean, statsval.mean()))
+        assert_true(allclose(expectedvar, statsval.variance()))
+
+    def test_max(self):
+        from numpy import maximum
+        arys, shape, size = _generate_test_arrays(2, 'uint8')
+        imagedata = ImagesLoader(self.sc).fromArrays(arys)
+        maxval = imagedata.max()
+        assert_true(array_equal(reduce(maximum, arys), maxval))
+
+    def test_min(self):
+        from numpy import minimum
+        arys, shape, size = _generate_test_arrays(2, 'uint8')
+        imagedata = ImagesLoader(self.sc).fromArrays(arys)
+        minval = imagedata.min()
+        assert_true(array_equal(reduce(minimum, arys), minval))
 
 
 class TestImagesUsingOutputDir(PySparkTestCaseWithOutputDir):

@@ -4,6 +4,8 @@ import cStringIO as StringIO
 import itertools
 from numpy import zeros, reshape
 import struct
+from thunder.rdds.keys import Dimensions
+from thunder.rdds.data import NumpyArrayAttributeData, NumpyArrayAttributeDataValue
 from thunder.rdds.images import PartitioningStrategy, PartitionedImages
 from thunder.rdds.series import Series
 
@@ -138,11 +140,21 @@ class ImageBlocksPartitioningStrategy(PartitioningStrategy):
         return ImageBlockValue.fromPlanarBlocks(partitionedSequence, 0)
 
 
-class ImageBlocks(PartitionedImages):
+class ImageBlocks(NumpyArrayAttributeData, PartitionedImages):
     """Intermediate representation used in conversion from Images to Series.
 
     This class is not expected to be directly used by clients.
     """
+    _metadata = NumpyArrayAttributeData._metadata + ['_dims', '_nimages']
+
+    @property
+    def _constructor(self):
+        return ImageBlocks
+
+    def populateParamsFromFirstRecord(self):
+        record = super(ImageBlocks, self).populateParamsFromFirstRecord()
+        self._dims = Dimensions.fromTuple(record[1].origshape)
+        return record
 
     @staticmethod
     def _blockToSeries(blockVal, seriesDim):
@@ -189,7 +201,7 @@ class ImageBlocks(PartitionedImages):
         return self.rdd.map(blockToBinarySeries)
 
 
-class ImageBlockValue(object):
+class ImageBlockValue(NumpyArrayAttributeDataValue):
     """
     Helper data structure for transformations from Images to Series.
 
@@ -212,12 +224,19 @@ class ImageBlockValue(object):
         values.ndim will be equal to len(origshape) and len(origslices).
         values.shape will typically be smaller than origshape, but may be the same.
     """
-    __slots__ = ('origshape', 'origslices', 'values')
+    __slots__ = ('origshape', 'origslices', '_values')
 
     def __init__(self, origshape, origslices, values):
         self.origshape = origshape
         self.origslices = origslices
-        self.values = values
+        self._values = values
+
+    @property
+    def values(self):
+        return self._values
+
+    def withValues(self, newValues):
+        return ImageBlockValue(self.origshape, self.origslices, newValues)
 
     @classmethod
     def fromArray(cls, ary):

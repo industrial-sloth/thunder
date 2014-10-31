@@ -1,12 +1,12 @@
 from numpy import ndarray, array, sum, mean, std, size, arange, \
     polyfit, polyval, percentile, asarray, maximum, zeros, corrcoef, where
 
-from thunder.rdds.data import Data
+from thunder.rdds.data import NumpyArrayValuedData
 from thunder.rdds.keys import Dimensions
 from thunder.utils.common import checkparams, loadmatvar
 
 
-class Series(Data):
+class Series(NumpyArrayValuedData):
     """
     Distributed collection of 1d array data with axis labels.
 
@@ -35,7 +35,7 @@ class Series(Data):
     SpatialSeries : a Series where the keys represent spatial coordinates
     """
 
-    _metadata = Data._metadata + ['_index', '_dims']
+    _metadata = NumpyArrayValuedData._metadata + ['_index', '_dims']
 
     def __init__(self, rdd, index=None, dims=None, dtype=None):
         super(Series, self).__init__(rdd, dtype=dtype)

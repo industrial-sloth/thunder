@@ -16,19 +16,10 @@ class Data(object):
         Standard pyspark RDD methods on a data instance `obj` that are not already
         directly exposed by the Data object can be accessed via `obj.rdd`.
     """
+    _metadata = []
 
-    _metadata = ['_dtype']
-
-    def __init__(self, rdd, dtype=None):
+    def __init__(self, rdd):
         self.rdd = rdd
-        # 'if dtype' is False here when passed a numpy dtype object.
-        self._dtype = dtype
-
-    @property
-    def dtype(self):
-        if not self._dtype:
-            self.populateParamsFromFirstRecord()
-        return self._dtype
 
     def populateParamsFromFirstRecord(self):
         """Calls first() on the underlying rdd, using the returned record to determine appropriate attribute settings
@@ -39,9 +30,7 @@ class Data(object):
 
         Returns the result of calling self.rdd.first().
         """
-        record = self.rdd.first()
-        self._dtype = str(record[1].dtype)
-        return record
+        return self.rdd.first()
 
     def __finalize__(self, other):
         """
@@ -93,6 +82,64 @@ class Data(object):
         """
         return self.rdd.keys()
 
+    def collect(self):
+        """ Return all records to the driver
+
+        This will be slow for large datasets, and may exhaust the available memory on the driver.
+
+        This calls the Spark collect() method on the underlying RDD.
+        """
+        return self.rdd.collect()
+
+    def count(self):
+        """ Mean of values, ignoring keys
+
+        This calls the Spark count() method on the underlying RDD.
+        """
+        return self.rdd.count()
+
+    def cache(self):
+        """ Enable in-memory caching
+
+        This calls the Spark cache() method on the underlying RDD.
+        """
+        self.rdd.cache()
+        return self
+
+    def filterOnKeys(self, func):
+        """ Filter records by applying a function to keys """
+        return self._constructor(self.rdd.filter(lambda (k, v): func(k))).__finalize__(self)._resetCounts()
+
+    def filterOnValues(self, func):
+        """ Filter records by applying a function to values """
+        return self._constructor(self.rdd.filter(lambda (k, v): func(v))).__finalize__(self)._resetCounts()
+
+
+class NumpyData(Data):
+    """Abstract base class for Data objects whose values are backed by numpy arrays
+
+    Subclassing implementations should override populateParamsFromFirstRecord() to set
+    the _dtype attribute, and should implement astype().
+    """
+    _metadata = Data._metadata + ['_dtype']
+
+    def __init__(self, rdd, dtype=None):
+        super(NumpyData, self).__init__(rdd)
+        # 'if dtype' is False here when passed a numpy dtype object.
+        self._dtype = dtype
+
+    @property
+    def dtype(self):
+        if not self._dtype:
+            self.populateParamsFromFirstRecord()
+        return self._dtype
+
+    def _astypeImpl(self, dtype, casting='safe'):
+        """Implementations should return a new RDD, with the numpy array data updated
+        to the passed dtype by the requested casting rules.
+        """
+        raise NotImplementedError("Subclasses should override this")
+
     def astype(self, dtype, casting='safe'):
         """Cast values to specified numpy dtype
 
@@ -126,24 +173,15 @@ class Data(object):
         if str(dtype) == str(self.dtype):
             # no cast required
             return self
-        nextrdd = self.rdd.mapValues(lambda v: v.astype(dtype, casting=casting))
+        nextrdd = self._astypeImpl(dtype, casting)
         return self._constructor(nextrdd, dtype=dtype).__finalize__(self)
 
-    def collect(self):
-        """ Return all records to the driver
+    def numpyValues(self):
+        """Return an RDD of the numpy arrays backing this data.
 
-        This will be slow for large datasets, and may exhaust the available memory on the driver.
-
-        This calls the Spark collect() method on the underlying RDD.
+        The returned RDD will not have keys, only numpy array values.
         """
-        return self.rdd.collect()
-
-    def count(self):
-        """ Mean of values, ignoring keys
-
-        This calls the Spark count() method on the underlying RDD.
-        """
-        return self.rdd.count()
+        raise NotImplementedError("Subclasses should override this")
 
     def mean(self, dtype='smallfloat', casting='safe'):
         """ Mean of values, ignoring keys
@@ -154,7 +192,7 @@ class Data(object):
         obj.mean() is equivalent to obj.astype(dtype, casting).rdd.values().mean().
         """
         out = self.astype(dtype, casting)
-        return out.rdd.values().mean()
+        return out.numpyValues().mean()
 
     def sum(self, dtype=None, casting='safe'):
         """ Sum of values, ignoring keys
@@ -165,7 +203,7 @@ class Data(object):
         obj.sum() is equivalent to obj.astype(dtype, casting).rdd.values().sum().
         """
         out = self.astype(dtype, casting)
-        return out.rdd.values().sum()
+        return out.numpyValues().sum()
 
     def variance(self, dtype='smallfloat', casting='safe'):
         """ Variance of values, ignoring keys
@@ -175,7 +213,7 @@ class Data(object):
 
         obj.variance() is equivalent to obj.astype(dtype, casting).rdd.values().variance()."""
         out = self.astype(dtype, casting)
-        return out.rdd.values().variance()
+        return out.numpyValues().variance()
 
     def stdev(self, dtype='smallfloat', casting='safe'):
         """ Standard deviation of values, ignoring keys
@@ -186,7 +224,7 @@ class Data(object):
         obj.stdev() is equivalent to obj.astype(dtype, casting).rdd.values().stdev().
         """
         out = self.astype(dtype, casting)
-        return out.rdd.values().stdev()
+        return out.numpyValues().stdev()
 
     def stats(self, dtype='smallfloat', casting='safe'):
         """ Stats of values, ignoring keys
@@ -197,30 +235,65 @@ class Data(object):
         obj.stats() is equivalent to obj.astype(dtype, casting).rdd.values().stats().
         """
         out = self.astype(dtype, casting)
-        return out.rdd.values().stats()
+        return out.numpyValues().stats()
 
     def max(self):
         """ Maximum of values, ignoring keys """
         from numpy import maximum
-        return self.rdd.values().reduce(maximum)
+        return self.numpyValues().reduce(maximum)
 
     def min(self):
         """ Minimum of values, ignoring keys """
         from numpy import minimum
-        return self.rdd.values().reduce(minimum)
+        return self.numpyValues().reduce(minimum)
 
-    def cache(self):
-        """ Enable in-memory caching
 
-        This calls the Spark cache() method on the underlying RDD.
+class NumpyArrayValuedData(NumpyData):
+    """Abstract base class for Data objects whose values are numpy arrays
+    """
+    def populateParamsFromFirstRecord(self):
+        record = super(NumpyArrayValuedData, self).populateParamsFromFirstRecord()
+        self._dtype = str(record[1].dtype)
+        return record
+
+    def _astypeImpl(self, dtype, casting='safe'):
+        return self.rdd.mapValues(lambda v: v.astype(dtype, casting=casting))
+
+    def numpyValues(self):
+        return self.rdd.values()
+
+
+class NumpyArrayAttributeDataValue(object):
+    """Superclass for values of a NumpyArrayAttributeData object
+
+    This class declares that instances have a read-only property `values`. By convention,
+    this `values` attribute should be a numpy array.
+    """
+    @property
+    def values(self):
+        """Returns a numpy array
         """
-        self.rdd.cache()
-        return self
+        raise NotImplementedError("Subclasses should override this")
 
-    def filterOnKeys(self, func):
-        """ Filter records by applying a function to keys """
-        return self._constructor(self.rdd.filter(lambda (k, v): func(k))).__finalize__(self)._resetCounts()
+    def withValues(self, newValues):
+        """Returns a new instance of this class, identical to self but with its `values`
+        member replaced by the passed `newValues`.
+        """
+        raise NotImplementedError("Subclasses should override this")
 
-    def filterOnValues(self, func):
-        """ Filter records by applying a function to values """
-        return self._constructor(self.rdd.filter(lambda (k, v): func(v))).__finalize__(self)._resetCounts()
+
+class NumpyArrayAttributeData(NumpyData):
+    """Abstract base class for Data objects whose values have a numpy array as their own `.values` attribute
+    """
+    def populateParamsFromFirstRecord(self):
+        record = super(NumpyArrayAttributeData, self).populateParamsFromFirstRecord()
+        self._dtype = str(record[1].values.dtype)
+        return record
+
+    def _astypeImpl(self, dtype, casting='safe'):
+        return self.rdd.mapValues(
+            lambda v: v.withValues(v.values.astype(dtype, casting=casting))
+        )
+
+    def numpyValues(self):
+        return self.rdd.map(lambda (k, v): v.values)

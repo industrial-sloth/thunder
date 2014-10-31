@@ -1,5 +1,5 @@
-from numpy import array, allclose
-from nose.tools import assert_equals
+from numpy import allclose, arange, array, array_equal, dtype, vstack
+from nose.tools import assert_equals, assert_true
 
 from thunder.rdds.series import Series
 from test_utils import PySparkTestCase
@@ -36,6 +36,79 @@ class TestSeriesConversions(PySparkTestCase):
 
         assert_equals('float16', str(castseries.dtype))
         assert_equals('float16', str(castseries.first()[1].dtype))
+
+
+class TestSeriesDataStatsMethods(PySparkTestCase):
+    def generateTestSeries(self):
+        from thunder.rdds.fileio.seriesloader import SeriesLoader
+        ary1 = arange(8, dtype=dtype('uint8')).reshape((2, 4))
+        ary2 = arange(8, 16, dtype=dtype('uint8')).reshape((2, 4))
+        return SeriesLoader(self.sc).fromArrays([ary1, ary2])
+
+    def test_mean(self):
+        from test_utils import elementwise_mean
+        series = self.generateTestSeries()
+        meanval = series.mean()
+
+        expected = elementwise_mean(series.values().collect())
+        assert_true(allclose(expected, meanval))
+        assert_equals('float16', str(meanval.dtype))
+
+    def test_sum(self):
+        from numpy import add
+        series = self.generateTestSeries()
+        sumval = series.sum(dtype='uint32')
+
+        arys = series.values().collect()
+        expected = reduce(add, arys)
+        assert_true(array_equal(expected, sumval))
+        assert_equals('uint32', str(sumval.dtype))
+
+    def test_variance(self):
+        from test_utils import elementwise_var
+        series = self.generateTestSeries()
+        varval = series.variance()
+
+        arys = series.values().collect()
+        expected = elementwise_var([ary.astype('float16') for ary in arys])
+        assert_true(allclose(expected, varval))
+        assert_equals('float16', str(varval.dtype))
+
+    def test_stdev(self):
+        from test_utils import elementwise_stdev
+        series = self.generateTestSeries()
+        stdval = series.stdev()
+
+        arys = series.values().collect()
+        expected = elementwise_stdev([ary.astype('float16') for ary in arys])
+        assert_true(allclose(expected, stdval, atol=0.001))
+        assert_equals('float32', str(stdval.dtype))  # why not float16? see equivalent Images test
+
+    def test_stats(self):
+        from test_utils import elementwise_mean, elementwise_var
+        series = self.generateTestSeries()
+        statsval = series.stats()
+
+        arys = series.values().collect()
+        floatarys = [ary.astype('float16') for ary in arys]
+        expectedmean = elementwise_mean(floatarys)
+        expectedvar = elementwise_var(floatarys)
+        assert_true(allclose(expectedmean, statsval.mean()))
+        assert_true(allclose(expectedvar, statsval.variance()))
+
+    def test_max(self):
+        from numpy import maximum
+        series = self.generateTestSeries()
+        maxval = series.max()
+        arys = series.values().collect()
+        assert_true(array_equal(reduce(maximum, arys), maxval))
+
+    def test_min(self):
+        from numpy import minimum
+        series = self.generateTestSeries()
+        minval = series.min()
+        arys = series.values().collect()
+        assert_true(array_equal(reduce(minimum, arys), minval))
 
 
 class TestSeriesMethods(PySparkTestCase):

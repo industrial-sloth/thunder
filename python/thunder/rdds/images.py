@@ -1,18 +1,17 @@
 from numpy import ndarray, arange, amax, amin, size, squeeze
 
-from thunder.rdds.data import Data
+from thunder.rdds.data import NumpyData, NumpyArrayValuedData
 from thunder.rdds.keys import Dimensions
 
 
-class Images(Data):
+class Images(NumpyArrayValuedData):
     """
     Distributed collection of images or volumes.
 
     Backed by an RDD of key-value pairs, where the key
     is an identifier and the value is a two or three-dimensional array.
     """
-
-    _metadata = Data._metadata + ['_dims', '_nimages']
+    _metadata = NumpyArrayValuedData._metadata + ['_dims', '_nimages']
 
     def __init__(self, rdd, dims=None, nimages=None, dtype=None):
         super(Images, self).__init__(rdd, dtype=dtype)
@@ -306,14 +305,15 @@ class PartitioningStrategy(object):
         raise NotImplementedError("numPartitions not implemented")
 
 
-class PartitionedImages(Data):
+class PartitionedImages(NumpyData):
     """Superclass for data returned by an Images.partition() call.
     """
-    def __init__(self, rdd, dims, nimages, dtype):
-        super(PartitionedImages, self).__init__(rdd)
+    _metadata = NumpyData._metadata + ['_dims', '_nimages']
+
+    def __init__(self, rdd, dims=None, nimages=None, dtype=None):
+        super(PartitionedImages, self).__init__(rdd, dtype=dtype)
         self._dims = dims
         self._nimages = nimages
-        self._dtype = dtype
 
     @property
     def dims(self):
@@ -321,6 +321,8 @@ class PartitionedImages(Data):
 
         n-tuple of positive int
         """
+        if not self._dims:
+            self.populateParamsFromFirstRecord()
         return self._dims
 
     @property
@@ -330,14 +332,6 @@ class PartitionedImages(Data):
         positive int
         """
         return self._nimages
-
-    @property
-    def dtype(self):
-        """Numpy data type of the underlying array data.
-
-        String or numpy dtype
-        """
-        return self._dtype
 
     def toSeries(self):
         """Returns a Series Data object.

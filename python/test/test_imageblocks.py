@@ -1,8 +1,77 @@
 import itertools
-from numpy import arange, array, array_equal, concatenate, dtype, prod
+from numpy import allclose, arange, array, array_equal, concatenate, dtype, prod
 import unittest
 from nose.tools import assert_equals, assert_true, assert_almost_equal, assert_raises
-from thunder.rdds.imageblocks import ImageBlockValue, _BlockMemoryAsReversedSequence
+from thunder.rdds.imageblocks import ImageBlocks, ImageBlockValue, _BlockMemoryAsReversedSequence
+from test_utils import PySparkTestCase
+
+
+class TestImageBlockStats(PySparkTestCase):
+    def generateTestImageBlocks(self):
+        ary = arange(16, dtype=dtype('uint8')).reshape((4, 4))
+        value1 = ImageBlockValue.fromArrayBySlices(ary, (slice(2), slice(None)))
+        value2 = ImageBlockValue.fromArrayBySlices(ary, (slice(2, 4), slice(None)))
+        keys = [(0, 0), (2, 0)]
+        rdd = self.sc.parallelize(zip(keys, (value1, value2)), 2)
+        return ImageBlocks(rdd, (4, 4), 1, 'uint8')
+
+    def setUp(self):
+        super(TestImageBlockStats, self).setUp()
+        self.blocks = self.generateTestImageBlocks()
+        self.arys = self.blocks.numpyValues().collect()
+
+    def test_mean(self):
+        from test_utils import elementwise_mean
+        meanval = self.blocks.mean()
+
+        expected = elementwise_mean(self.arys)
+        assert_true(allclose(expected, meanval))
+        assert_equals('float16', str(meanval.dtype))
+
+    def test_sum(self):
+        from numpy import add
+        sumval = self.blocks.sum(dtype="uint32")
+
+        arys = [ary.astype('uint32') for ary in self.arys]
+        expected = reduce(add, arys)
+        assert_true(array_equal(expected, sumval))
+        assert_equals('uint32', str(sumval.dtype))
+
+    def test_variance(self):
+        from test_utils import elementwise_var
+        varval = self.blocks.variance()
+
+        expected = elementwise_var(self.arys)
+        assert_true(allclose(expected, varval, atol=0.001))
+        assert_equals('float16', str(varval.dtype))
+
+    def test_stddev(self):
+        from test_utils import elementwise_stdev
+        stdval = self.blocks.stdev()
+
+        expected = elementwise_stdev(self.arys)
+        assert_true(allclose(expected, stdval, atol=0.001))
+        assert_equals("float32", str(stdval.dtype))  # see equivalent test in test_images.py
+
+    def test_stats(self):
+        from test_utils import elementwise_mean, elementwise_var
+        statsval = self.blocks.stats()
+
+        floatarys = [ary.astype('float16') for ary in self.arys]
+        expectedmean = elementwise_mean(floatarys)
+        expectedvar = elementwise_var(floatarys)
+        assert_true(allclose(expectedmean, statsval.mean()))
+        assert_true(allclose(expectedvar, statsval.variance()))
+
+    def test_max(self):
+        from numpy import maximum
+        maxval = self.blocks.max()
+        assert_true(array_equal(reduce(maximum, self.arys), maxval))
+
+    def test_min(self):
+        from numpy import minimum
+        minval = self.blocks.min()
+        assert_true(array_equal(reduce(minimum, self.arys), minval))
 
 
 class TestImageBlockValue(unittest.TestCase):
