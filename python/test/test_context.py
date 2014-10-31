@@ -38,6 +38,11 @@ class TestContextLoading(PySparkTestCaseWithOutputDir):
         range_series = self.tsc.loadImagesAsSeries(filepath, dims=(128, 64), shuffle=shuffle)
         range_series_ary = range_series.pack()
 
+        # access private members to ensure attributes have been wired through correctly
+        assert_equals((128, 64), range_series._dims.count)
+        assert_equals("int16", str(range_series._dtype))
+        assert_equals(np.arange(1), range_series._index)
+
         assert_equals((128, 64), range_series.dims.count)
         assert_equals((128, 64), range_series_ary.shape)
         assert_true(np.array_equal(expectedary, range_series_ary))
@@ -54,12 +59,17 @@ class TestContextLoading(PySparkTestCaseWithOutputDir):
         rangeary.tofile(filepath)
         expectedary = rangeary.reshape((32, 64, 4), order='F')
 
-        range_series_noshuffle = self.tsc.loadImagesAsSeries(filepath, dims=(32, 64, 4), shuffle=shuffle)
-        range_series_noshuffle_ary = range_series_noshuffle.pack()
+        range_series = self.tsc.loadImagesAsSeries(filepath, dims=(32, 64, 4), shuffle=shuffle)
+        range_series_ary = range_series.pack()
 
-        assert_equals((32, 64, 4), range_series_noshuffle.dims.count)
-        assert_equals((32, 64, 4), range_series_noshuffle_ary.shape)
-        assert_true(np.array_equal(expectedary, range_series_noshuffle_ary))
+        # access private members to ensure attributes have been wired through correctly
+        assert_equals((32, 64, 4), range_series._dims.count)
+        assert_equals("int16", str(range_series._dtype))
+        assert_equals(np.arange(1), range_series._index)
+
+        assert_equals((32, 64, 4), range_series.dims.count)
+        assert_equals((32, 64, 4), range_series_ary.shape)
+        assert_true(np.array_equal(expectedary, range_series_ary))
 
     def test_load3dStackAsSeriesNoShuffle(self):
         self.__run_load3dStackAsSeries(False)
@@ -78,6 +88,12 @@ class TestContextLoading(PySparkTestCaseWithOutputDir):
         expectedary2 = rangeary2.reshape((128, 64), order='F')
 
         range_series = self.tsc.loadImagesAsSeries(self.outputdir, dims=(128, 64), shuffle=shuffle)
+
+        # access private members to ensure attributes have been wired through correctly
+        assert_equals((128, 64), range_series._dims.count)
+        assert_equals("int16", str(range_series._dtype))
+        assert_true(np.array_equal(np.arange(2), range_series._index))
+
         range_series_ary = range_series.pack()
         range_series_ary_xpose = range_series.pack(transpose=True)
 
@@ -104,6 +120,12 @@ class TestContextLoading(PySparkTestCaseWithOutputDir):
         del pilimg, tmpary
 
         range_series = self.tsc.loadImagesAsSeries(self.outputdir, inputformat="tif-stack", shuffle=shuffle)
+
+        # access private members to ensure attributes have been wired through correctly
+        assert_equals((60, 120, 1), range_series._dims.count)
+        assert_equals("uint8", str(range_series._dtype))
+        assert_equals(np.arange(1), range_series._index)
+
         range_series_ary = range_series.pack()
 
         assert_equals((60, 120, 1), range_series.dims.count)

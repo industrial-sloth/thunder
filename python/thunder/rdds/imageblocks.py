@@ -2,7 +2,7 @@
 """
 import cStringIO as StringIO
 import itertools
-from numpy import zeros, reshape
+from numpy import arange, reshape, zeros
 import struct
 from thunder.rdds.keys import Dimensions
 from thunder.rdds.data import NumpyArrayAttributeData, NumpyArrayAttributeDataValue
@@ -164,7 +164,9 @@ class ImageBlocks(NumpyArrayAttributeData, PartitionedImages):
     def toSeries(self, seriesDim=0):
         # returns generator of (z, y, x) array data for all z, y, x
         seriesrdd = self.rdd.flatMap(lambda kv: ImageBlocks._blockToSeries(kv[1], seriesDim))
-        return Series(seriesrdd)
+
+        idx = arange(self._nimages) if self._nimages else None
+        return Series(seriesrdd, index=idx, dims=self.dims, dtype=self.dtype)
 
     @staticmethod
     def getBinarySeriesNameForKey(blockKey):

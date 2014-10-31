@@ -67,7 +67,7 @@ class Images(NumpyArrayValuedData):
         # sort must come after group, b/c group will mess with ordering.
         groupedvals = vals.groupByKey(numPartitions=partitioningStrategy.npartitions).sortBy(lambda (k, _): k[::-1])
         blockedvals = groupedvals.mapValues(partitioningStrategy.blockingFunction)
-        return returntype(blockedvals, self.dims, self.nimages, self.dtype)
+        return returntype(blockedvals, dims=self.dims, nimages=self.nimages, dtype=self.dtype)
 
     def exportAsPngs(self, outputdirname, fileprefix="export", overwrite=False,
                      collectToDriver=True):
