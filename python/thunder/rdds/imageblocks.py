@@ -503,7 +503,7 @@ class PaddedImageBlockValue(NumpyArrayAttributeDataValue):
     """
     Attributes:
     -----------
-    imageshape: tuple of positive int
+    imgshape: tuple of positive int
         Shape of original image of which this object represents a subsection
 
     padimgslices: tuple of slices
@@ -577,6 +577,103 @@ class PaddedImageBlockValue(NumpyArrayAttributeDataValue):
 
         return PaddedImageBlockValue(tuple(imagearray.shape), tuple(padslices), tuple(coreslices),
                                      tuple(corevalslices), vals)
+
+    @classmethod
+    def toArray(cls, blocksIter):
+        """Creates a new array from an iterator over spatially-compatible padded IBVs
+        """
+        ary = None
+        for block in blocksIter:
+            if ary is None:
+                ary = zeros(block.imgshape, dtype=block.values.dtype)
+            ary[block.coreimgslices] = block.values[block.corevalslices]
+        return ary
+
+    def getXRange(self, dim, slices):
+        sl = slices[dim]
+        stop = self.imgshape[dim] if sl.stop is None else sl.stop
+        start = 0 if sl.start is None else sl.start
+        step = 1 if sl.step is None else sl.step
+        return xrange(start, stop, step)
+
+    def addDimension(self, newdimidx=0, newdimsize=1):
+        """Returns a new PaddedImageBlockValue embedded in a space of dimension n+1
+
+        The new PaddedImageBlockValue will always have the new dimension in the first position
+        (index 0). ('Time' will be at self.imgshape[0] and self.*slices[0]).
+
+        Parameters:
+        -----------
+        newdimidx: nonnegative integer, default 0
+            The zero-based index of the current block within the newly added dimension.
+            (For instance, the timepoint of the volume within a new time series.)
+
+        newdimsize: positive integer, default 1
+            The total size of the newly added dimension.
+            (For instance, the total number of time points in the higher-dimensional volume
+            in which the new block is embedded.)
+
+        Returns:
+        --------
+            a new PaddedImageBlockValue object, with slices and shapes modified as
+            described above. New block value may be a view onto self.value.
+        """
+        newimgshape = list(self.imgshape)
+        newimgshape.insert(0, newdimsize)
+
+        def insertslice(slices):
+            newslices = list(slices)
+            newslices.insert(0, slice(newdimidx, newdimidx+1, 1))
+            return newslices
+        newcoreimgslices, newpadimgslices = \
+            (insertslice(slices_) for slices_ in (self.coreimgslices, self.padimgslices))
+        newcorevalslices = list(self.corevalslices)
+        newcorevalslices.insert(0, slice(0, 1, 1))
+
+        newblockshape = list(self.values.shape)
+        newblockshape.insert(0, 1)
+        newvalues = reshape(self.values, tuple(newblockshape))
+        return PaddedImageBlockValue(newimgshape, newpadimgslices, newcoreimgslices, newcorevalslices, newvalues)
+
+    @classmethod
+    def stackPlanarBlocks(cls, blocksIter, planarDim=0):
+        """Creates a new PaddedImageBlockValue from an iterator over PIBVs that have at least one singleton dimension.
+        """
+        def _initialize_fromPlanarBlocks(firstBlock, planarDim_):
+            # set up collection array:
+            fullndim = len(firstBlock.imgshape)
+            if not (planarDim_ == 0 or planarDim_ == len(firstBlock.origshape)-1 or planarDim_ == -1):
+                raise ValueError("planarDim must specify either first or last dimension, got %d" % planarDim_)
+            if planarDim_ < 0:
+                planarDim_ = fullndim + planarDim_
+
+            newshape = list(firstBlock.values.shape)
+            newshape[planarDim_] = firstBlock.imgshape[planarDim_]
+
+            return zeros(newshape, dtype=firstBlock.values.dtype)
+
+        ary = None
+        firstblock = None
+        for block in blocksIter:
+            if ary is None:
+                # set up collection array:
+                ary = _initialize_fromPlanarBlocks(block, planarDim)
+                firstblock = block
+
+            # put values into collection array:
+            targslices = [slice(None)] * len(block.imgshape)
+            targslices[planarDim] = block.padimgslices[planarDim]
+            ary[targslices] = block.values
+
+        # new slices should be full slice for formerly planar dimension, plus existing block slices
+        newpadimgslices = list(firstblock.padimgslices)
+        newpadimgslices[planarDim] = slice(None)
+        newcoreimgslices = list(firstblock.coreimgslices)
+        newcoreimgslices[planarDim] = slice(None)
+        newcorevalslices = list(firstblock.corevalslices)
+        newcorevalslices[planarDim] = slice(None)
+
+        return cls(tuple(firstblock.imgshape), newpadimgslices, newcoreimgslices, newcorevalslices, ary)
 
 
 class _BlockMemoryAsSequence(object):

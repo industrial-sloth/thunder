@@ -233,6 +233,24 @@ class TestPaddedImageBlockValue(unittest.TestCase):
         assert_equals(slice(1, 4, 1), pibv.padimgslices[0])
         assert_equals(slice(1, 4, 1), pibv.padimgslices[1])
 
+    def test_stackPlanarBlocks(self):
+        ary = arange(32, dtype=dtype('uint8')).reshape(2, 4, 4)
+        slices = [slice(2, 4, 1)] * 2
+        pibv1 = PaddedImageBlockValue.fromArrayBySlices(ary, [slice(0, 1, 1)]+slices, (0, 1, 1))
+        pibv2 = PaddedImageBlockValue.fromArrayBySlices(ary, [slice(1, 2, 1)]+slices, (0, 1, 1))
+        underTest = PaddedImageBlockValue.stackPlanarBlocks((pibv1, pibv2))
+
+        assert_true(array_equal(ary[:, 1:, 1:], underTest.values))
+        assert_equals(slice(None), underTest.coreimgslices[0])
+        assert_equals(slices[0], underTest.coreimgslices[1])
+        assert_equals(slices[1], underTest.coreimgslices[2])
+        assert_equals(slice(None), underTest.corevalslices[0])
+        assert_equals(slice(1, 3, 1), underTest.corevalslices[1])
+        assert_equals(slice(1, 3, 1), underTest.corevalslices[2])
+        assert_equals(slice(None), underTest.padimgslices[0])
+        assert_equals(slice(1, 4, 1), underTest.padimgslices[1])
+        assert_equals(slice(1, 4, 1), underTest.padimgslices[2])
+
 
 class TestBlockMemoryAsSequence(unittest.TestCase):
     def test_range(self):
