@@ -2,7 +2,7 @@ import itertools
 from numpy import allclose, arange, array, array_equal, concatenate, dtype, prod
 import unittest
 from nose.tools import assert_equals, assert_true, assert_almost_equal, assert_raises
-from thunder.rdds.imageblocks import ImageBlocks, ImageBlockValue, _BlockMemoryAsReversedSequence
+from thunder.rdds.imageblocks import ImageBlocks, ImageBlockValue, PaddedImageBlockValue, _BlockMemoryAsReversedSequence
 from test_utils import PySparkTestCase
 
 
@@ -189,6 +189,49 @@ class TestImageBlockValue(unittest.TestCase):
         # check that values are in original order
         collectedvals = array([kv[1] for kv in seriesvals], dtype=dtype('int16')).ravel()
         assert_true(array_equal(ary.ravel(order='F'), collectedvals))
+
+
+class TestPaddedImageBlockValue(unittest.TestCase):
+    def test_fromArrayBySlices_fullArray(self):
+        ary = arange(8, dtype=dtype('int16')).reshape((2, 4))
+        slices = [slice(None)] * 2
+        pibv = PaddedImageBlockValue.fromArrayBySlices(ary, slices, 2)
+
+        assert_true(array_equal(ary, pibv.values))
+        assert_equals(slices[0], pibv.coreimgslices[0])
+        assert_equals(slices[1], pibv.coreimgslices[1])
+        assert_equals(slice(0, 2, 1), pibv.corevalslices[0])
+        assert_equals(slice(0, 4, 1), pibv.corevalslices[1])
+        # since there's no actual padding here, padded slices are equal to core slices
+        assert_equals(slice(0, 2, 1), pibv.padimgslices[0])
+        assert_equals(slice(0, 4, 1), pibv.padimgslices[1])
+
+    def test_fromArrayBySlices_padded1(self):
+        ary = arange(16, dtype=dtype('int16')).reshape((4, 4))
+        slices = [slice(1, 3, 1)] * 2
+        # ask for 2 pixels padding, but will only get 1 due to edge:
+        pibv = PaddedImageBlockValue.fromArrayBySlices(ary, slices, 2)
+
+        assert_true(array_equal(ary, pibv.values))
+        assert_equals(slices[0], pibv.coreimgslices[0])
+        assert_equals(slices[1], pibv.coreimgslices[1])
+        assert_equals(slice(1, 3, 1), pibv.corevalslices[0])
+        assert_equals(slice(1, 3, 1), pibv.corevalslices[1])
+        assert_equals(slice(0, 4, 1), pibv.padimgslices[0])
+        assert_equals(slice(0, 4, 1), pibv.padimgslices[1])
+
+    def test_fromArrayBySlices_padded2(self):
+        ary = arange(16, dtype=dtype('int16')).reshape((4, 4))
+        slices = [slice(2, 4, 1)] * 2
+        pibv = PaddedImageBlockValue.fromArrayBySlices(ary, slices, 1)
+
+        assert_true(array_equal(ary[1:, 1:], pibv.values))
+        assert_equals(slices[0], pibv.coreimgslices[0])
+        assert_equals(slices[1], pibv.coreimgslices[1])
+        assert_equals(slice(1, 3, 1), pibv.corevalslices[0])
+        assert_equals(slice(1, 3, 1), pibv.corevalslices[1])
+        assert_equals(slice(1, 4, 1), pibv.padimgslices[0])
+        assert_equals(slice(1, 4, 1), pibv.padimgslices[1])
 
 
 class TestBlockMemoryAsSequence(unittest.TestCase):

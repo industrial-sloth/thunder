@@ -499,6 +499,86 @@ class ImageBlockValue(NumpyArrayAttributeDataValue):
                (repr(self.origshape), repr(self.origslices), repr(self.values))
 
 
+class PaddedImageBlockValue(NumpyArrayAttributeDataValue):
+    """
+    Attributes:
+    -----------
+    imageshape: tuple of positive int
+        Shape of original image of which this object represents a subsection
+
+    padimgslices: tuple of slices
+        Slices into original image that produce this object's values
+        origimage[self.padimgslices] == self.values
+
+    coreimgslices: tuple of slices
+        Slices into original image that would yield an array that is included in this object's values, but that does
+        not overlap with the coreimgslices of any other PaddedImageBlockValue. The nonoverlapping "core" part of the
+        block.
+
+    corevalslices: tuple of slices
+        Slices into this object's values attribute that would yield an array whose values do not overlap with
+        any other PaddedImageBlockValue's core.
+        origimage[self.coreimgslices] == self.values[self.corevalslices]
+
+    values: numpy array
+    """
+    __slots__ = ('imgshape', 'padimgslices', 'coreimgslices', 'corevalslices',  '_values')
+
+    def __init__(self, imgshape, padimgslices, coreimgslices, corevalslices, values):
+        self.imgshape = imgshape
+        self.padimgslices = padimgslices
+        self.coreimgslices = coreimgslices
+        self.corevalslices = corevalslices
+        self._values = values
+
+    @property
+    def values(self):
+        return self._values
+
+    def withValues(self, newValues):
+        return PaddedImageBlockValue(self.imgshape, self.padimgslices, self.coreimgslices, self.corevalslices,
+                                     newValues)
+    @classmethod
+    def fromArrayBySlices(cls, imagearray, coreslices, padding):
+        # check whether padding is already sequence of int; if so, validate that it has the expected dimensionality
+        try:
+            lpad = len(padding)
+        except TypeError:
+            padding = [padding] * imagearray.ndim
+            lpad = imagearray.ndim
+        if not lpad == imagearray.ndim:
+            raise ValueError("Padding tuple must be of equal dimensionality as image array;" +
+                             " got %s, must be of dimension %d" % (str(padding), imagearray.ndim))
+        if not len(coreslices) == imagearray.ndim:
+            raise ValueError("Coreslices must be of equal dimensionality as image array;" +
+                             " got %s, must be of dimension %s" % (str(coreslices), imagearray.ndim))
+
+        padslices = []
+        actualpadding = []
+        for coreslice, pad, l in zip(coreslices, padding, imagearray.shape):
+            # normalize 'None' values to appropriate positions
+            normstart = coreslice.start if coreslice.start else 0
+            normstop = coreslice.stop if coreslice.stop else l
+            normstep = coreslice.step if coreslice.step else 1
+            start = max(0, normstart-pad)
+            stop = min(l, normstop+pad)
+            startpadsize = normstart - start
+            stoppadsize = stop - normstop
+            padslices.append(slice(start, stop, normstep))
+            actualpadding.append((startpadsize, stoppadsize))
+
+        # calculate "core" slices into values array based on actual size of padding
+        vals = imagearray[padslices]
+        corevalslices = []
+        for actualpad, l in zip(actualpadding, vals.shape):
+            actualstartpad, actualstoppad = actualpad
+            corevalslice = slice(actualstartpad, l-actualstoppad, 1)
+            corevalslices.append(corevalslice)
+
+        return PaddedImageBlockValue(tuple(imagearray.shape), tuple(padslices), tuple(coreslices),
+                                     tuple(corevalslices), vals)
+
+
 class _BlockMemoryAsSequence(object):
     """Helper class used in calculation of slices for requested block partitions of a particular size.
 
