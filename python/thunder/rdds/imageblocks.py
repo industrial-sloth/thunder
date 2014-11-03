@@ -37,7 +37,7 @@ class ImageBlocksPartitioningStrategy(PartitioningStrategy):
         return ImageBlocks
 
     @classmethod
-    def generateFromBlockSize(cls, blockSize, dims, nimages, datatype, numSparkPartitions=None):
+    def generateFromBlockSize(cls, blockSize, dims, nimages, datatype, numSparkPartitions=None, **kwargs):
         """Returns a new ImageBlocksPartitioningStrategy, that yields blocks
         closely matching the requested size in bytes.
 
@@ -70,7 +70,7 @@ class ImageBlocksPartitioningStrategy(PartitioningStrategy):
             # we can produce; just give back the biggest block size
             tmpidx -= 1
         splitsPerDim = memseq.indtosub(tmpidx)
-        return cls(splitsPerDim, numSparkPartitions=numSparkPartitions)
+        return cls(splitsPerDim, numSparkPartitions=numSparkPartitions, **kwargs)
 
     @property
     def npartitions(self):
@@ -119,6 +119,9 @@ class ImageBlocksPartitioningStrategy(PartitioningStrategy):
         self.__validateSplitsForImage()
         self._slices = ImageBlocksPartitioningStrategy.__generateSlices(self._splitsPerDim, self.dims)
 
+    def _partitionArray(self, imgary, blockslices):
+        return ImageBlockValue.fromArrayBySlices(imgary, blockslices, docopy=False)
+
     def partitionFunction(self, timePointIdxAndImageArray):
         tpidx, imgary = timePointIdxAndImageArray
         totnumimages = self.nimages
@@ -127,7 +130,7 @@ class ImageBlocksPartitioningStrategy(PartitioningStrategy):
         ret_vals = []
         sliceproduct = itertools.product(*slices)
         for blockslices in sliceproduct:
-            blockval = ImageBlockValue.fromArrayBySlices(imgary, blockslices, docopy=False)
+            blockval = self._partitionArray(imgary, blockslices)
             blockval = blockval.addDimension(newdimidx=tpidx, newdimsize=totnumimages)
             # resulting key will be (x, y, z) (for 3d data), where x, y, z are starting
             # position of block within image volume
@@ -139,12 +142,38 @@ class ImageBlocksPartitioningStrategy(PartitioningStrategy):
         return ImageBlockValue.fromPlanarBlocks(partitionedSequence, 0)
 
 
+class PaddedImageBlocksPartitioningStrategy(ImageBlocksPartitioningStrategy):
+    def __init__(self, splitsPerDim, padding, numSparkPartitions=None):
+        super(PaddedImageBlocksPartitioningStrategy, self).__init__(splitsPerDim, numSparkPartitions=numSparkPartitions)
+        self._padding = padding
+
+    def getPartitionedImagesClass(self):
+        return PaddedImageBlocks
+
+    @classmethod
+    def generateFromBlockSize(cls, blockSize, dims, nimages, datatype, padding=10, numSparkPartitions=None):
+        return super(PaddedImageBlocksPartitioningStrategy, cls)\
+            .generateFromBlockSize(blockSize, dims, nimages, datatype,
+                                   numSparkPartitions=numSparkPartitions,
+                                   padding=padding)
+
+    def _partitionArray(self, imgary, blockslices):
+        return PaddedImageBlockValue.fromArrayBySlices(imgary, blockslices, self._padding)
+
+    def blockingFunction(self, partitionedSequence):
+        return PaddedImageBlockValue.stackPlanarBlocks(partitionedSequence, 0)
+
+
 class ImageBlocks(NumpyArrayAttributeData, PartitionedImages):
     """Intermediate representation used in conversion from Images to Series.
 
     This class is not expected to be directly used by clients.
     """
     _metadata = NumpyArrayAttributeData._metadata + ['_dims', '_nimages']
+
+    @property
+    def _valuetype(self):
+        return ImageBlockValue
 
     @property
     def _constructor(self):
@@ -173,7 +202,7 @@ class ImageBlocks(NumpyArrayAttributeData, PartitionedImages):
         timerdd = self.rdd.flatMap(lambda (k, v): v.toPlanarBlocks(planarDim=seriesDim))
         squeezedrdd = timerdd.mapValues(lambda v: v.removeDimension(squeezeDim=seriesDim))
         timesortedrdd = squeezedrdd.groupByKey().sortByKey()
-        imagesrdd = timesortedrdd.mapValues(ImageBlockValue.toArray)
+        imagesrdd = timesortedrdd.mapValues(self._valuetype.toArray)
         return Images(imagesrdd, dims=self._dims, nimages=self._nimages, dtype=self._dtype)
 
     @staticmethod
@@ -209,6 +238,28 @@ class ImageBlocks(NumpyArrayAttributeData, PartitionedImages):
             return label, val
 
         return self.rdd.map(blockToBinarySeries)
+
+
+class PaddedImageBlocks(ImageBlocks):
+    """Intermediate representation used in conversion from Images to Series.
+
+    This class is not expected to be directly used by clients.
+    """
+    _metadata = ImageBlocks._metadata
+
+    @property
+    def _valuetype(self):
+        return PaddedImageBlockValue
+
+    @property
+    def _constructor(self):
+        return PaddedImageBlocks
+
+    def populateParamsFromFirstRecord(self):
+        # call ImageBlocks' own superclass here - we need to look for record[1].imgshape, not record[1].origshape
+        record = super(ImageBlocks, self).populateParamsFromFirstRecord()
+        self._dims = Dimensions.fromTuple(record[1].imgshape)
+        return record
 
 
 class ImageBlockValue(NumpyArrayAttributeDataValue):
@@ -538,6 +589,12 @@ class PaddedImageBlockValue(NumpyArrayAttributeDataValue):
     def withValues(self, newValues):
         return PaddedImageBlockValue(self.imgshape, self.padimgslices, self.coreimgslices, self.corevalslices,
                                      newValues)
+
+    @classmethod
+    def fromArray(cls, ary):
+        slices = tuple([slice(None)]*ary.ndim)
+        return PaddedImageBlockValue(ary.shape, slices, slices, slices, values=ary)
+
     @classmethod
     def fromArrayBySlices(cls, imagearray, coreslices, padding):
         # check whether padding is already sequence of int; if so, validate that it has the expected dimensionality
@@ -589,12 +646,18 @@ class PaddedImageBlockValue(NumpyArrayAttributeDataValue):
             ary[block.coreimgslices] = block.values[block.corevalslices]
         return ary
 
-    def getXRange(self, dim, slices):
-        sl = slices[dim]
-        stop = self.imgshape[dim] if sl.stop is None else sl.stop
+    # def getXRange(self, dim, slices):
+    #     sl = slices[dim]
+    #     stop = self.imgshape[dim] if sl.stop is None else sl.stop
+    #     start = 0 if sl.start is None else sl.start
+    #     step = 1 if sl.step is None else sl.step
+    #     return xrange(start, stop, step)
+    @staticmethod
+    def getStartStopStep(sl, refsize):
+        stop = refsize if sl.stop is None else sl.stop
         start = 0 if sl.start is None else sl.start
         step = 1 if sl.step is None else sl.step
-        return xrange(start, stop, step)
+        return start, stop, step
 
     def addDimension(self, newdimidx=0, newdimsize=1):
         """Returns a new PaddedImageBlockValue embedded in a space of dimension n+1
@@ -662,7 +725,7 @@ class PaddedImageBlockValue(NumpyArrayAttributeDataValue):
 
             # put values into collection array:
             targslices = [slice(None)] * len(block.imgshape)
-            targslices[planarDim] = block.padimgslices[planarDim]
+            targslices[planarDim] = block.padimgslices[planarDim]  # should be singleton dim
             ary[targslices] = block.values
 
         # new slices should be full slice for formerly planar dimension, plus existing block slices
@@ -691,8 +754,14 @@ class PaddedImageBlockValue(NumpyArrayAttributeDataValue):
         """Generator function that yields an iteration over (timepoint, PaddedImageBlockValue)
         pairs.
         """
-        imgrange = self.getXRange(planarDim, self.coreimgslices)
-        valrange = self.getXRange(planarDim, self.corevalslices)
+        imgstart, imgstop, imgstep = \
+            PaddedImageBlockValue.getStartStopStep(self.coreimgslices[planarDim],
+                                                   self.imgshape[planarDim])
+        imgrange = xrange(imgstart, imgstop, imgstep)
+        valstart, valstop, valstep = \
+            PaddedImageBlockValue.getStartStopStep(self.corevalslices[planarDim],
+                                                   self.values.shape[planarDim])
+        valrange = xrange(valstart, valstop, valstep)
         for imgtpidx, valtpidx in zip(imgrange, valrange):
             # set up new slices:
             newcislices = list(self.coreimgslices)
@@ -722,13 +791,22 @@ class PaddedImageBlockValue(NumpyArrayAttributeDataValue):
             expandedIdxSeq = list(reversed(idxSeq))
             expandedIdxSeq.insert(insertDim, None)
             slices = []
-            for d, (idx, valslice) in enumerate(zip(expandedIdxSeq, self.corevalslices)):
+            for d, idx in enumerate(expandedIdxSeq):
                 if idx is None:
                     newslice = slice(None)
                 else:
                     # correct slice into our own value for any offset given by origslice:
-                    start = idx - valslice.start if not valslice == slice(None) else idx
-                    newslice = slice(start, start+1, 1)
+                    # start = idx - valslice.start if not valslice == slice(None) else idx
+                    # newslice = slice(start, start+1, 1)
+                    valslice = self.corevalslices[d]
+                    valstart, valstop, valstep = \
+                        PaddedImageBlockValue.getStartStopStep(valslice, self.values.shape)
+                    imgslice = self.coreimgslices[d]
+                    imgstart, imgstop, imgstep = \
+                        PaddedImageBlockValue.getStartStopStep(imgslice, self.imgshape)
+                    stepnum = (idx - imgstart) / imgstep
+                    validx = valstart + stepnum * valstep
+                    newslice = slice(validx, validx+1, 1)
                 slices.append(newslice)
 
             series = self.values[slices].squeeze()
@@ -740,7 +818,11 @@ class PaddedImageBlockValue(NumpyArrayAttributeDataValue):
         When passed to itertools.product, these iterators should cover the original image
         volume represented by this block.
         """
-        return [self.getXRange(d, self.coreimgslices) for d in xrange(len(self.imgshape))]
+        retval = []
+        for sl, mx in zip(self.coreimgslices, self.imgshape):
+            start, stop, step = PaddedImageBlockValue.getStartStopStep(sl, mx)
+            retval.append(xrange(start, stop, step))
+        return retval
 
     def __repr__(self):
         return "PaddedImageBlockValue(imgshape=%s, padimgslices=%s, coreimgslices=%s, corevalslices=%s, values=%s)" % \

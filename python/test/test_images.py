@@ -8,7 +8,7 @@ from nose.tools import assert_equals, assert_true, assert_almost_equal, assert_r
 
 from thunder.rdds.fileio.imagesloader import ImagesLoader
 from thunder.rdds.fileio.seriesloader import SeriesLoader
-from thunder.rdds.imageblocks import ImageBlocksPartitioningStrategy
+from thunder.rdds.imageblocks import ImageBlocksPartitioningStrategy, PaddedImageBlocksPartitioningStrategy
 from test_utils import PySparkTestCase, PySparkTestCaseWithOutputDir
 
 
@@ -236,13 +236,28 @@ class TestImages(PySparkTestCase):
         for bpd in test_params:
             strategy = ImageBlocksPartitioningStrategy(splitsPerDim=bpd)
             series = imagedata.partition(strategy).toSeries().collect()
+            self.evaluate_series(arys, series, sz)
 
+            strategy = PaddedImageBlocksPartitioningStrategy(splitsPerDim=bpd, padding=1)
+            series = imagedata.partition(strategy).toSeries().collect()
             self.evaluate_series(arys, series, sz)
 
     def test_roundtripThroughBlocks(self):
         imagepath = findSourceTreeDir("utils/data/fish/tif-stack")
         images = ImagesLoader(self.sc).fromMultipageTif(imagepath)
         strategy = ImageBlocksPartitioningStrategy((2, 2, 2))
+        partitionedimages = images.partition(strategy)
+        recombinedimages = partitionedimages.toImages()
+
+        collectedimages = images.collect()
+        roundtrippedimages = recombinedimages.collect()
+        for orig, roundtripped in zip(collectedimages, roundtrippedimages):
+            assert_true(array_equal(orig[1], roundtripped[1]))
+
+    def test_roundtripThroughPaddedBlocks(self):
+        imagepath = findSourceTreeDir("utils/data/fish/tif-stack")
+        images = ImagesLoader(self.sc).fromMultipageTif(imagepath)
+        strategy = PaddedImageBlocksPartitioningStrategy((2, 2, 2), padding=(5, 5, 0))
         partitionedimages = images.partition(strategy)
         recombinedimages = partitionedimages.toImages()
 
@@ -407,15 +422,9 @@ class TestImagesUsingOutputDir(PySparkTestCaseWithOutputDir):
             gd, dt = params
             self._run_tstSaveAsBinarySeries(idx, narys, dt, gd)
 
-    def test_roundtripConvertToSeries(self):
-        imagepath = findSourceTreeDir("utils/data/fish/tif-stack")
+    def _run_tst_roundtripConvertToSeries(self, images, strategy):
         outdir = os.path.join(self.outputdir, "fish-series-dir")
 
-        images = ImagesLoader(self.sc).fromMultipageTif(imagepath)
-        strategy = ImageBlocksPartitioningStrategy.generateFromBlockSize(blockSize=76*20,
-                                                                         dims=images.dims.count,
-                                                                         nimages=images.nimages,
-                                                                         datatype=images.dtype)
         partitionedimages = images.partition(strategy)
         series = partitionedimages.toSeries()
         series_ary = series.pack()
@@ -424,17 +433,38 @@ class TestImagesUsingOutputDir(PySparkTestCaseWithOutputDir):
         converted_series = SeriesLoader(self.sc).fromBinary(outdir)
         converted_series_ary = converted_series.pack()
 
-        assert_equals((76, 87, 2), series.dims.count)
-        assert_equals((20, 76, 87, 2), series_ary.shape)
+        assert_equals(images.dims.count, series.dims.count)
+        expected_shape = tuple([images.nimages] + list(images.dims.count))
+        assert_equals(expected_shape, series_ary.shape)
         assert_true(array_equal(series_ary, converted_series_ary))
 
-    def test_fromStackToSeriesWithPack(self):
+    def test_roundtripConvertToSeries(self):
+        imagepath = findSourceTreeDir("utils/data/fish/tif-stack")
+
+        images = ImagesLoader(self.sc).fromMultipageTif(imagepath)
+        strategy = ImageBlocksPartitioningStrategy.generateFromBlockSize(blockSize=76*20,
+                                                                         dims=images.dims.count,
+                                                                         nimages=images.nimages,
+                                                                         datatype=images.dtype)
+        self._run_tst_roundtripConvertToSeries(images, strategy)
+
+    def test_roundtripConvertToSeriesWithPaddedBlocks(self):
+        imagepath = findSourceTreeDir("utils/data/fish/tif-stack")
+
+        images = ImagesLoader(self.sc).fromMultipageTif(imagepath)
+        strategy = PaddedImageBlocksPartitioningStrategy.generateFromBlockSize(blockSize=76*20,
+                                                                               dims=images.dims.count,
+                                                                               nimages=images.nimages,
+                                                                               datatype=images.dtype,
+                                                                               padding=10)
+        self._run_tst_roundtripConvertToSeries(images, strategy)
+
+    def _run_tst_fromStackToSeriesWithPack(self, strategy):
         ary = arange(8, dtype=dtype('int16')).reshape((2, 4))
         filename = os.path.join(self.outputdir, "test.stack")
         ary.tofile(filename)
 
         image = ImagesLoader(self.sc).fromStack(filename, dims=(4, 2))
-        strategy = ImageBlocksPartitioningStrategy.generateFromBlockSize("150M", (4, 2), 1, ary.dtype)
         series = image.partition(strategy).toSeries()
 
         seriesvals = series.collect()
@@ -459,6 +489,16 @@ class TestImagesUsingOutputDir(PySparkTestCaseWithOutputDir):
 
         # check that packing returns transpose of original array
         assert_true(array_equal(ary.T, seriesary))
+
+    def test_fromStackToSeriesWithPack(self):
+        strategy = ImageBlocksPartitioningStrategy.generateFromBlockSize("150M", (4, 2), 1, dtype('int16'))
+        self._run_tst_fromStackToSeriesWithPack(strategy)
+
+    def test_fromStackToSeriesWithPackAndPaddedBlocks(self):
+        strategy = PaddedImageBlocksPartitioningStrategy.generateFromBlockSize("150M", (4, 2), 1,
+                                                                               dtype('int16'),
+                                                                               padding=1)
+        self._run_tst_fromStackToSeriesWithPack(strategy)
 
 
 if __name__ == "__main__":

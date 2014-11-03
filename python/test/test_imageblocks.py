@@ -300,6 +300,28 @@ class TestPaddedImageBlockValue(unittest.TestCase):
         assert_true(array_equal(ary[:, 2, 3].ravel(), seriesvals[2][1]))
         assert_true(array_equal(ary[:, 3, 3].ravel(), seriesvals[3][1]))
 
+    def test_toSeriesIter2(self):
+        # add singleton dimension on end of (2, 4) shape to be "time":
+        ary = arange(8, dtype=dtype('int16')).reshape((2, 4, 1))
+
+        imageblock = PaddedImageBlockValue.fromArray(ary)
+
+        seriesvals = list(imageblock.toSeriesIter(-1))
+
+        # check ordering of keys
+        assert_equals((0, 0), seriesvals[0][0])  # first key
+        assert_equals((1, 0), seriesvals[1][0])  # second key
+        assert_equals((0, 1), seriesvals[2][0])
+        assert_equals((1, 1), seriesvals[3][0])
+        assert_equals((0, 2), seriesvals[4][0])
+        assert_equals((1, 2), seriesvals[5][0])
+        assert_equals((0, 3), seriesvals[6][0])
+        assert_equals((1, 3), seriesvals[7][0])
+
+        # check that values are in original order
+        collectedvals = array([kv[1] for kv in seriesvals], dtype=dtype('int16')).ravel()
+        assert_true(array_equal(ary.ravel(order='F'), collectedvals))
+
 
 class TestBlockMemoryAsSequence(unittest.TestCase):
     def test_range(self):
