@@ -675,6 +675,50 @@ class PaddedImageBlockValue(NumpyArrayAttributeDataValue):
 
         return cls(tuple(firstblock.imgshape), newpadimgslices, newcoreimgslices, newcorevalslices, ary)
 
+    def toSeriesIter(self, seriesDim=0):
+        """Returns an iterator over key,array pairs suitable for casting into a Series object.
+        """
+        rangeiters = self._get_range_iterators()
+        # remove iterator over dimension where we are requesting series
+        del rangeiters[seriesDim]
+        # correct for original dimensionality if inserting at end of list
+        insertDim = seriesDim if seriesDim >= 0 else len(self.imgshape) + seriesDim
+
+        for idxSeq in itertools.product(*reversed(rangeiters)):
+            expandedIdxSeq = list(reversed(idxSeq))
+            expandedIdxSeq.insert(insertDim, None)
+            slices = []
+            for d, (idx, valslice) in enumerate(zip(expandedIdxSeq, self.corevalslices)):
+                if idx is None:
+                    newslice = slice(None)
+                else:
+                    # correct slice into our own value for any offset given by origslice:
+                    start = idx - valslice.start if not valslice == slice(None) else idx
+                    newslice = slice(start, start+1, 1)
+                slices.append(newslice)
+
+            series = self.values[slices].squeeze()
+            yield tuple(reversed(idxSeq)), series
+
+    def getCoreImageXRange(self, dim):
+        sl = self.coreimgslices[dim]
+        stop = self.imgshape[dim] if sl.stop is None else sl.stop
+        start = 0 if sl.start is None else sl.start
+        step = 1 if sl.step is None else sl.step
+        return xrange(start, stop, step)
+
+    def _get_range_iterators(self):
+        """Returns a sequence of iterators over the range of the slices in self.coreimgslices
+
+        When passed to itertools.product, these iterators should cover the original image
+        volume represented by this block.
+        """
+        return [self.getCoreImageXRange(d) for d in xrange(len(self.imgshape))]
+
+    def __repr__(self):
+        return "PaddedImageBlockValue(imgshape=%s, padimgslices=%s, coreimgslices=%s, corevalslices=%s, values=%s)" % \
+               (repr(self.imgshape), repr(self.padimgslices), repr(self.coreimgslices), repr(self.corevalslices), repr(self.values))
+
 
 class _BlockMemoryAsSequence(object):
     """Helper class used in calculation of slices for requested block partitions of a particular size.

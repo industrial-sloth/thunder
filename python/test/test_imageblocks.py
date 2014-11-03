@@ -222,6 +222,7 @@ class TestPaddedImageBlockValue(unittest.TestCase):
 
     def test_fromArrayBySlices_padded2(self):
         ary = arange(16, dtype=dtype('int16')).reshape((4, 4))
+        # get block from indices [2:3] on each dimension
         slices = [slice(2, 4, 1)] * 2
         pibv = PaddedImageBlockValue.fromArrayBySlices(ary, slices, 1)
 
@@ -250,6 +251,26 @@ class TestPaddedImageBlockValue(unittest.TestCase):
         assert_equals(slice(None), underTest.padimgslices[0])
         assert_equals(slice(1, 4, 1), underTest.padimgslices[1])
         assert_equals(slice(1, 4, 1), underTest.padimgslices[2])
+
+    def test_toSeriesIter(self):
+        ary = arange(32, dtype=dtype('uint8')).reshape(2, 4, 4)
+        slices = [slice(2, 4, 1)] * 2
+        pibv1 = PaddedImageBlockValue.fromArrayBySlices(ary, [slice(0, 1, 1)]+slices, (0, 1, 1))
+        pibv2 = PaddedImageBlockValue.fromArrayBySlices(ary, [slice(1, 2, 1)]+slices, (0, 1, 1))
+        underTest = PaddedImageBlockValue.stackPlanarBlocks((pibv1, pibv2))
+
+        seriesvals = list(underTest.toSeriesIter())
+
+        # check ordering of keys
+        assert_equals((2, 2), seriesvals[0][0])  # first key
+        assert_equals((3, 2), seriesvals[1][0])  # second key
+        assert_equals((2, 3), seriesvals[2][0])
+        assert_equals((3, 3), seriesvals[3][0])
+
+        assert_true(array_equal(ary[:, 2, 2].ravel(), seriesvals[0][1]))
+        assert_true(array_equal(ary[:, 3, 2].ravel(), seriesvals[1][1]))
+        assert_true(array_equal(ary[:, 2, 3].ravel(), seriesvals[2][1]))
+        assert_true(array_equal(ary[:, 3, 3].ravel(), seriesvals[3][1]))
 
 
 class TestBlockMemoryAsSequence(unittest.TestCase):
