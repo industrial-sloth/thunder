@@ -675,6 +675,40 @@ class PaddedImageBlockValue(NumpyArrayAttributeDataValue):
 
         return cls(tuple(firstblock.imgshape), newpadimgslices, newcoreimgslices, newcorevalslices, ary)
 
+    def removeDimension(self, squeezeDim=0):
+        newshape = list(self.imgshape)
+        del newshape[squeezeDim]
+        newcislices = list(self.coreimgslices)
+        del newcislices[squeezeDim]
+        newcvslices = list(self.corevalslices)
+        del newcvslices[squeezeDim]
+        newpislices = list(self.padimgslices)
+        del newpislices[squeezeDim]
+        newary = self._values.squeeze(squeezeDim)  # will throw error here if squeezeDim is not singleton
+        return PaddedImageBlockValue(newshape, newpislices, newcislices, newcvslices, newary)
+
+    def toPlanarBlocks(self, planarDim=0):
+        """Generator function that yields an iteration over (timepoint, PaddedImageBlockValue)
+        pairs.
+        """
+        imgrange = self.getXRange(planarDim, self.coreimgslices)
+        valrange = self.getXRange(planarDim, self.corevalslices)
+        for imgtpidx, valtpidx in zip(imgrange, valrange):
+            # set up new slices:
+            newcislices = list(self.coreimgslices)
+            newcislices[planarDim] = slice(imgtpidx, imgtpidx+1, 1)
+            newcvslices = list(self.corevalslices)
+            newcvslices[planarDim] = slice(0, 1, 1)
+            newpislices = list(self.padimgslices)
+            newpislices[planarDim] = slice(imgtpidx, imgtpidx+1, 1)
+
+            # new array value:
+            aryslices = [slice(None)] * self._values.ndim
+            aryslices[planarDim] = slice(valtpidx, valtpidx+1, 1)
+            newval = self._values[aryslices]
+            newblock = PaddedImageBlockValue(self.imgshape, newpislices, newcislices, newcvslices, newval)
+            yield imgtpidx, newblock
+
     def toSeriesIter(self, seriesDim=0):
         """Returns an iterator over key,array pairs suitable for casting into a Series object.
         """
@@ -700,24 +734,29 @@ class PaddedImageBlockValue(NumpyArrayAttributeDataValue):
             series = self.values[slices].squeeze()
             yield tuple(reversed(idxSeq)), series
 
-    def getCoreImageXRange(self, dim):
-        sl = self.coreimgslices[dim]
-        stop = self.imgshape[dim] if sl.stop is None else sl.stop
-        start = 0 if sl.start is None else sl.start
-        step = 1 if sl.step is None else sl.step
-        return xrange(start, stop, step)
-
     def _get_range_iterators(self):
         """Returns a sequence of iterators over the range of the slices in self.coreimgslices
 
         When passed to itertools.product, these iterators should cover the original image
         volume represented by this block.
         """
-        return [self.getCoreImageXRange(d) for d in xrange(len(self.imgshape))]
+        return [self.getXRange(d, self.coreimgslices) for d in xrange(len(self.imgshape))]
 
     def __repr__(self):
         return "PaddedImageBlockValue(imgshape=%s, padimgslices=%s, coreimgslices=%s, corevalslices=%s, values=%s)" % \
                (repr(self.imgshape), repr(self.padimgslices), repr(self.coreimgslices), repr(self.corevalslices), repr(self.values))
+
+    def __eq__(self, other):
+        from numpy import array_equal
+        try:
+            for attrname in ('imgshape', 'padimgslices', 'coreimgslices', 'corevalslices'):
+                v = getattr(other, attrname)
+                if not list(v) == list(getattr(self, attrname)):
+                    return False
+            v = getattr(other, 'values')
+            return array_equal(v, self._values)
+        except AttributeError:
+            return False
 
 
 class _BlockMemoryAsSequence(object):

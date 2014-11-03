@@ -1,7 +1,7 @@
 import itertools
 from numpy import allclose, arange, array, array_equal, concatenate, dtype, prod
 import unittest
-from nose.tools import assert_equals, assert_true, assert_almost_equal, assert_raises
+from nose.tools import assert_equals, assert_false, assert_true, assert_almost_equal, assert_raises
 from thunder.rdds.imageblocks import ImageBlocks, ImageBlockValue, PaddedImageBlockValue, _BlockMemoryAsReversedSequence
 from test_utils import PySparkTestCase
 
@@ -251,6 +251,34 @@ class TestPaddedImageBlockValue(unittest.TestCase):
         assert_equals(slice(None), underTest.padimgslices[0])
         assert_equals(slice(1, 4, 1), underTest.padimgslices[1])
         assert_equals(slice(1, 4, 1), underTest.padimgslices[2])
+
+    def test_equals(self):
+        ary = arange(32, dtype=dtype('uint8')).reshape(2, 4, 4)
+        slices = [slice(2, 4, 1)] * 2
+        pibv1 = PaddedImageBlockValue.fromArrayBySlices(ary, [slice(0, 1, 1)]+slices, (0, 1, 1))
+        pibv2 = PaddedImageBlockValue.fromArrayBySlices(ary, [slice(1, 2, 1)]+slices, (0, 1, 1))
+        pibv1copy = PaddedImageBlockValue.fromArrayBySlices(ary, [slice(0, 1, 1)]+slices, (0, 1, 1))
+
+        assert_true(pibv1 == pibv1)
+        assert_false(pibv1 == pibv2)
+        assert_true(pibv1 == pibv1copy)
+
+    def test_toPlanarBlocks(self):
+        ary = arange(32, dtype=dtype('uint8')).reshape(2, 4, 4)
+        slices = [slice(2, 4, 1)] * 2
+        pibv1 = PaddedImageBlockValue.fromArrayBySlices(ary, [slice(0, 1, 1)]+slices, (0, 1, 1))
+        pibv2 = PaddedImageBlockValue.fromArrayBySlices(ary, [slice(1, 2, 1)]+slices, (0, 1, 1))
+        stacked = PaddedImageBlockValue.stackPlanarBlocks((pibv1, pibv2))
+
+        unstacked = list(stacked.toPlanarBlocks())
+
+        assert_equals(2, len(unstacked))
+        # check time points:
+        assert_equals(0, unstacked[0][0])
+        assert_equals(1, unstacked[1][0])
+        # check values:
+        assert_equals(pibv1, unstacked[0][1])
+        assert_equals(pibv2, unstacked[1][1])
 
     def test_toSeriesIter(self):
         ary = arange(32, dtype=dtype('uint8')).reshape(2, 4, 4)
