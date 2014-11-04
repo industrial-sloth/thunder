@@ -195,7 +195,9 @@ class ImageBlocks(NumpyArrayAttributeData, PartitionedImages):
         seriesrdd = self.rdd.flatMap(lambda kv: ImageBlocks._blockToSeries(kv[1], seriesDim))
 
         idx = arange(self._nimages) if self._nimages else None
-        return Series(seriesrdd, index=idx, dims=self.dims, dtype=self.dtype)
+        # TODO: propagate dims here
+        # note that Series dims should not be equal to imageblocks dims; imageblocks include time
+        return Series(seriesrdd, index=idx, dtype=self.dtype)
 
     def toImages(self, seriesDim=0):
         from thunder.rdds.images import Images
