@@ -177,7 +177,7 @@ def parseMemoryString(memStr):
         return int(memStr)
 
 
-def raiseErrorIfPathExists(path):
+def raiseErrorIfPathExists(path, awsCredentialsOverride=None):
     """Raises a ValueError if the passed path string is found to already exist.
 
     The ValueError message will suggest calling with overwrite=True; this function is expected to be
@@ -185,7 +185,7 @@ def raiseErrorIfPathExists(path):
     """
     # check that specified output path does not already exist
     from thunder.rdds.fileio.readers import getFileReaderForPath
-    reader = getFileReaderForPath(path)()
+    reader = getFileReaderForPath(path)(awsCredentialsOverride=awsCredentialsOverride)
     existing = reader.list(path, includeDirectories=True)
     if existing:
         raise ValueError("Path %s appears to already exist. Specify a new directory, or call " % path +

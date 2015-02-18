@@ -60,6 +60,13 @@ class Data(object):
             self.populateParamsFromFirstRecord()
         return self._dtype
 
+    @property
+    def awsCredentials(self):
+        if self._awsCredentials is None:
+            from thunder.utils.common import AWSCredentials
+            return AWSCredentials()  # return instance with None, None as public and private keys
+        return self._awsCredentials
+
     def populateParamsFromFirstRecord(self):
         """
         Calls first() on the underlying rdd, using the returned record to determine appropriate attribute settings

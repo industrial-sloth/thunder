@@ -103,7 +103,8 @@ class Images(Data):
         groupedvals = vals.groupBy(lambda (k, _): k.spatialKey).sortBy(lambda (k, _): tuple(k[::-1]))
         # groupedvals is now rdd of (z, y, x spatial key, [(partitioning key, numpy array)...]
         blockedvals = groupedvals.map(blockingStrategy.combiningFunction)
-        return returntype(blockedvals, dims=self.dims, nimages=self.nrecords, dtype=self.dtype)
+        return returntype(blockedvals, dims=self.dims, nimages=self.nrecords, dtype=self.dtype,
+                          awsCredentials=self._awsCredentials)
 
     def toSeries(self, blockSizeSpec="150M", units="pixels"):
         """Converts this Images object to a Series object.
@@ -215,10 +216,12 @@ class Images(Data):
         bufRdd = self.rdd.map(toFilenameAndPngBuf)
 
         if collectToDriver:
-            writer = getCollectedFileWriterForPath(outputDirPath)(outputDirPath, overwrite=overwrite)
+            writer = getCollectedFileWriterForPath(outputDirPath)(outputDirPath, overwrite=overwrite,
+                                                                  awsCredentialsOverride=self._awsCredentials)
             writer.writeCollectedFiles(bufRdd.collect())
         else:
-            writer = getParallelWriterForPath(outputDirPath)(outputDirPath, overwrite=overwrite)
+            writer = getParallelWriterForPath(outputDirPath)(outputDirPath, overwrite=overwrite,
+                                                             awsCredentialsOverride=self._awsCredentials)
             bufRdd.foreach(writer.writerFcn)
 
     def maxProjection(self, axis=2):

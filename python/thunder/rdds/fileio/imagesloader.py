@@ -46,7 +46,7 @@ class ImagesLoader(object):
         narrays = len(arrays)
         npartitions = min(narrays, npartitions) if npartitions else narrays
         return Images(self.sc.parallelize(enumerate(arrays), npartitions),
-                      dims=shape, dtype=str(dtype), nrecords=narrays)
+                      dims=shape, dtype=str(dtype), nrecords=narrays, awsCredentials=self.awsCredentialsOverride)
 
     def fromStack(self, dataPath, dims, dtype='int16', ext='stack', startIdx=None, stopIdx=None, recursive=False,
                   nplanes=None, npartitions=None):
@@ -130,7 +130,8 @@ class ImagesLoader(object):
                                 npartitions=npartitions)
         nrecords = reader.lastNRecs if nplanes is None else None
         newDims = tuple(list(dims[:-1]) + [nplanes]) if nplanes else dims
-        return Images(readerRdd.flatMap(toArray), nrecords=nrecords, dims=newDims, dtype=dtype)
+        return Images(readerRdd.flatMap(toArray), nrecords=nrecords, dims=newDims, dtype=dtype,
+                      awsCredentials=self.awsCredentialsOverride)
 
     def fromTif(self, dataPath, ext='tif', startIdx=None, stopIdx=None, recursive=False, nplanes=None,
                 npartitions=None):
@@ -237,7 +238,7 @@ class ImagesLoader(object):
         readerRdd = reader.read(dataPath, ext=ext, startIdx=startIdx, stopIdx=stopIdx, recursive=recursive,
                                 npartitions=npartitions)
         nrecords = reader.lastNRecs if nplanes is None else None
-        return Images(readerRdd.flatMap(multitifReader), nrecords=nrecords)
+        return Images(readerRdd.flatMap(multitifReader), nrecords=nrecords, awsCredentials=self.awsCredentialsOverride)
 
     def fromPng(self, dataPath, ext='png', startIdx=None, stopIdx=None, recursive=False, npartitions=None):
         """Load an Images object stored in a directory of png files
@@ -275,4 +276,5 @@ class ImagesLoader(object):
         reader = getParallelReaderForPath(dataPath)(self.sc, awsCredentialsOverride=self.awsCredentialsOverride)
         readerRdd = reader.read(dataPath, ext=ext, startIdx=startIdx, stopIdx=stopIdx, recursive=recursive,
                                 npartitions=npartitions)
-        return Images(readerRdd.mapValues(readPngFromBuf), nrecords=reader.lastNRecs)
+        return Images(readerRdd.mapValues(readPngFromBuf), nrecords=reader.lastNRecs,
+                      awsCredentials=self.awsCredentialsOverride)

@@ -72,7 +72,8 @@ class SeriesLoader(object):
 
         dims = Dimensions.fromTuple(shape[::-1])
 
-        return Series(self.sc.parallelize(zip(keys, values), self.minPartitions), dims=dims, dtype=str(dtype))
+        return Series(self.sc.parallelize(zip(keys, values), self.minPartitions), dims=dims, dtype=str(dtype),
+                      awsCredentials=self.awsCredentialsOverride)
 
     @staticmethod
     def __normalizeDatafilePattern(dataPath, ext):
@@ -121,7 +122,7 @@ class SeriesLoader(object):
 
         lines = self.sc.textFile(dataPath, self.minPartitions)
         data = lines.map(lambda x: parse(x, nkeys))
-        return Series(data, dtype=str(dtype))
+        return Series(data, dtype=str(dtype), awsCredentials=self.awsCredentialsOverride)
 
     # keytype, valuetype here violate camelCasing convention for consistence with JSON conf file format
     BinaryLoadParameters = namedtuple('BinaryLoadParameters', 'nkeys nvalues keytype valuetype')
@@ -211,7 +212,8 @@ class SeriesLoader(object):
                          (tuple(int(x) for x in frombuffer(buffer(v, 0, keySize), dtype=keyDtype)),
                           frombuffer(buffer(v, keySize), dtype=valDtype)))
 
-        return Series(data, dtype=str(valDtype), index=arange(paramsObj.nvalues)).astype(newDtype, casting)
+        return Series(data, dtype=str(valDtype), index=arange(paramsObj.nvalues),
+                      awsCredentials=self.awsCredentialsOverride).astype(newDtype, casting)
 
     def _getSeriesBlocksFromStack(self, dataPath, dims, ext="stack", blockSize="150M", dtype='int16',
                                   newDtype='smallfloat', casting='safe', startIdx=None, stopIdx=None, recursive=False):
@@ -541,7 +543,8 @@ class SeriesLoader(object):
             self._getSeriesBlocksFromStack(dataPath, dims, ext=ext, blockSize=blockSize, dtype=dtype,
                                            newDtype=newDtype, casting=casting, startIdx=startIdx, stopIdx=stopIdx,
                                            recursive=recursive)
-        return Series(seriesBlocks, dims=dims, dtype=newDtype, index=arange(npointsInSeries))
+        return Series(seriesBlocks, dims=dims, dtype=newDtype, index=arange(npointsInSeries),
+                      awsCredentials=self.awsCredentialsOverride)
 
     def fromTif(self, dataPath, ext="tif", blockSize="150M", newDtype='smallfloat', casting='safe',
                 startIdx=None, stopIdx=None, recursive=False):
@@ -582,7 +585,7 @@ class SeriesLoader(object):
                                                                    recursive=recursive)
         dims, npointsInSeries, dtype = metadata
         return Series(seriesBlocks, dims=Dimensions.fromTuple(dims[::-1]), dtype=dtype,
-                      index=arange(npointsInSeries))
+                      index=arange(npointsInSeries), awsCredentials=self.awsCredentialsOverride)
 
     def __saveSeriesRdd(self, seriesBlocks, outputDirPath, dims, npointsInSeries, dtype, overwrite=False):
         if not overwrite:
@@ -726,7 +729,8 @@ class SeriesLoader(object):
         else:
             keys = arange(0, data.shape[0])
 
-        rdd = Series(self.sc.parallelize(zip(keys, data), self.minPartitions), dtype=str(data.dtype))
+        rdd = Series(self.sc.parallelize(zip(keys, data), self.minPartitions), dtype=str(data.dtype),
+                     awsCredentials=self.awsCredentialsOverride)
 
         return rdd
 
@@ -743,7 +747,8 @@ class SeriesLoader(object):
         else:
             keys = arange(0, data.shape[0])
 
-        rdd = Series(self.sc.parallelize(zip(keys, data), self.minPartitions), dtype=str(data.dtype))
+        rdd = Series(self.sc.parallelize(zip(keys, data), self.minPartitions), dtype=str(data.dtype),
+                     awsCredentials=self.awsCredentialsOverride)
 
         return rdd
 
@@ -780,16 +785,18 @@ def writeSeriesConfig(outputDirPath, nkeys, nvalues, keyType='int16', valueType=
     import json
     from thunder.rdds.fileio.writers import getFileWriterForPath
 
-    filewriterClass = getFileWriterForPath(outputDirPath, awsCredentialsOverride=awsCredentialsOverride)
+    filewriterClass = getFileWriterForPath(outputDirPath)
     # write configuration file
     # config JSON keys are lowercased "valuetype", "keytype", not valueType, keyType
     conf = {'input': outputDirPath,
             'nkeys': nkeys, 'nvalues': nvalues,
             'valuetype': str(valueType), 'keytype': str(keyType)}
 
-    confWriter = filewriterClass(outputDirPath, confFilename, overwrite=overwrite)
+    confWriter = filewriterClass(outputDirPath, confFilename, overwrite=overwrite,
+                                 awsCredentialsOverride=awsCredentialsOverride)
     confWriter.writeFile(json.dumps(conf, indent=2))
 
     # touch "SUCCESS" file as final action
-    successWriter = filewriterClass(outputDirPath, "SUCCESS", overwrite=overwrite)
+    successWriter = filewriterClass(outputDirPath, "SUCCESS", overwrite=overwrite,
+                                    awsCredentialsOverride=awsCredentialsOverride)
     successWriter.writeFile('')
