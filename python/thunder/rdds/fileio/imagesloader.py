@@ -10,7 +10,7 @@ from thunder.rdds.images import Images
 class ImagesLoader(object):
     """Loader object used to instantiate Images data stored in a variety of formats.
     """
-    def __init__(self, sparkContext):
+    def __init__(self, sparkContext, awsCredentialsOverride=None):
         """Initialize a new ImagesLoader object.
 
         Parameters
@@ -19,6 +19,7 @@ class ImagesLoader(object):
             The pyspark SparkContext object used by the current Thunder environment.
         """
         self.sc = sparkContext
+        self.awsCredentialsOverride = awsCredentialsOverride
 
     def fromArrays(self, arrays, npartitions=None):
         """Load Images data from passed sequence of numpy arrays.
@@ -124,7 +125,7 @@ class ImagesLoader(object):
                 slices = [slice(None)] * (ary.ndim - 1) + [slice(lastPlane, ary.shape[-1])]
                 yield idx*npoints + timepoint, ary[slices]
 
-        reader = getParallelReaderForPath(dataPath)(self.sc)
+        reader = getParallelReaderForPath(dataPath)(self.sc, awsCredentialsOverride=self.awsCredentialsOverride)
         readerRdd = reader.read(dataPath, ext=ext, startIdx=startIdx, stopIdx=stopIdx, recursive=recursive,
                                 npartitions=npartitions)
         nrecords = reader.lastNRecs if nplanes is None else None
@@ -232,7 +233,7 @@ class ImagesLoader(object):
             keys = [idx*nvals + timepoint for timepoint in xrange(nvals)]
             return zip(keys, values)
 
-        reader = getParallelReaderForPath(dataPath)(self.sc)
+        reader = getParallelReaderForPath(dataPath)(self.sc, awsCredentialsOverride=self.awsCredentialsOverride)
         readerRdd = reader.read(dataPath, ext=ext, startIdx=startIdx, stopIdx=stopIdx, recursive=recursive,
                                 npartitions=npartitions)
         nrecords = reader.lastNRecs if nplanes is None else None
@@ -271,7 +272,7 @@ class ImagesLoader(object):
             fbuf = BytesIO(buf)
             return imread(fbuf, format='png')
 
-        reader = getParallelReaderForPath(dataPath)(self.sc)
+        reader = getParallelReaderForPath(dataPath)(self.sc, awsCredentialsOverride=self.awsCredentialsOverride)
         readerRdd = reader.read(dataPath, ext=ext, startIdx=startIdx, stopIdx=stopIdx, recursive=recursive,
                                 npartitions=npartitions)
         return Images(readerRdd.mapValues(readPngFromBuf), nrecords=reader.lastNRecs)

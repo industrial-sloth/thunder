@@ -22,7 +22,8 @@ from thunder.utils.common import parseMemoryString, smallestFloatType
 class SeriesLoader(object):
     """Loader object used to instantiate Series data stored in a variety of formats.
     """
-    def __init__(self, sparkContext, minPartitions=None):
+    def __init__(self, sparkContext, minPartitions=None,
+                 awsCredentialsOverride=None):
         """Initialize a new SeriesLoader object.
 
         Parameters
@@ -35,6 +36,7 @@ class SeriesLoader(object):
         """
         self.sc = sparkContext
         self.minPartitions = minPartitions
+        self.awsCredentialsOverride = awsCredentialsOverride
 
     def fromArrays(self, arrays):
         """Create a Series object from a sequence of numpy ndarrays resident in memory on the driver.
@@ -125,8 +127,7 @@ class SeriesLoader(object):
     BinaryLoadParameters = namedtuple('BinaryLoadParameters', 'nkeys nvalues keytype valuetype')
     BinaryLoadParameters.__new__.__defaults__ = (None, None, 'int16', 'int16')
 
-    @staticmethod
-    def __loadParametersAndDefaults(dataPath, confFilename, nkeys, nvalues, keyType, valueType):
+    def __loadParametersAndDefaults(self, dataPath, confFilename, nkeys, nvalues, keyType, valueType):
         """Collects parameters to use for binary series loading.
 
         Priority order is as follows:
@@ -274,7 +275,7 @@ class SeriesLoader(object):
         else:
             newDtype = str(newDtype)
 
-        reader = getFileReaderForPath(dataPath)()
+        reader = getFileReaderForPath(dataPath)(awsCredentialsOverride=self.awsCredentialsOverride)
         filenames = reader.list(dataPath, startIdx=startIdx, stopIdx=stopIdx, recursive=recursive)
         if not filenames:
             raise IOError("No files found for path '%s'" % dataPath)
@@ -388,7 +389,7 @@ class SeriesLoader(object):
         dataPath = self.__normalizeDatafilePattern(dataPath, ext)
         blockSize = parseMemoryString(blockSize)
 
-        reader = getFileReaderForPath(dataPath)()
+        reader = getFileReaderForPath(dataPath)(awsCredentialsOverride=self.awsCredentialsOverride)
         filenames = reader.list(dataPath, startIdx=startIdx, stopIdx=stopIdx, recursive=recursive)
         if not filenames:
             raise IOError("No files found for path '%s'" % dataPath)
@@ -428,6 +429,8 @@ class SeriesLoader(object):
         while blocksPerPlane * blocklenPixels < height * width:  # make sure we're reading the plane fully
             blocksPerPlane += 1
 
+        awsCredentialsOverride = self.awsCredentialsOverride
+
         # keys will be planeidx, blockidx:
         keys = list(itertools.product(xrange(npages), xrange(blocksPerPlane)))
 
@@ -438,7 +441,7 @@ class SeriesLoader(object):
             blockStart = None
             blockEnd = None
             for fname in filenames:
-                reader_ = getFileReaderForPath(fname)()
+                reader_ = getFileReaderForPath(fname)(awsCredentialsOverride=awsCredentialsOverride)
                 fp = reader_.open(fname)
                 try:
                     if doMinimizeReads:
@@ -581,13 +584,13 @@ class SeriesLoader(object):
         return Series(seriesBlocks, dims=Dimensions.fromTuple(dims[::-1]), dtype=dtype,
                       index=arange(npointsInSeries))
 
-    @staticmethod
-    def __saveSeriesRdd(seriesBlocks, outputDirPath, dims, npointsInSeries, dtype, overwrite=False):
+    def __saveSeriesRdd(self, seriesBlocks, outputDirPath, dims, npointsInSeries, dtype, overwrite=False):
         if not overwrite:
             from thunder.utils.common import raiseErrorIfPathExists
             raiseErrorIfPathExists(outputDirPath)
             overwrite = True  # prevent additional downstream checks for this path
-        writer = getParallelWriterForPath(outputDirPath)(outputDirPath, overwrite=overwrite)
+        writer = getParallelWriterForPath(outputDirPath)(outputDirPath, overwrite=overwrite,
+                                                         awsCredentialsOverride=self.awsCredentialsOverride)
 
         def blockToBinarySeries(kvIter):
             label = None
@@ -604,7 +607,8 @@ class SeriesLoader(object):
             return [(label, val)]
 
         seriesBlocks.mapPartitions(blockToBinarySeries).foreach(writer.writerFcn)
-        writeSeriesConfig(outputDirPath, len(dims), npointsInSeries, valueType=dtype, overwrite=overwrite)
+        writeSeriesConfig(outputDirPath, len(dims), npointsInSeries, valueType=dtype, overwrite=overwrite,
+                          awsCredentialsOverride=self.awsCredentialsOverride)
 
     def saveFromStack(self, dataPath, outputDirPath, dims, ext="stack", blockSize="150M", dtype='int16',
                       newDtype=None, casting='safe', startIdx=None, stopIdx=None, overwrite=False, recursive=False):
@@ -658,7 +662,7 @@ class SeriesLoader(object):
                                            newDtype=newDtype, casting=casting, startIdx=startIdx, stopIdx=stopIdx,
                                            recursive=recursive)
 
-        SeriesLoader.__saveSeriesRdd(seriesBlocks, outputDirPath, dims, npointsInSeries, newDtype, overwrite=overwrite)
+        self.__saveSeriesRdd(seriesBlocks, outputDirPath, dims, npointsInSeries, newDtype, overwrite=overwrite)
 
     def saveFromTif(self, dataPath, outputDirPath, ext="tif", blockSize="150M",
                     newDtype=None, casting='safe', startIdx=None, stopIdx=None,
@@ -707,7 +711,7 @@ class SeriesLoader(object):
                                                                    startIdx=startIdx, stopIdx=stopIdx,
                                                                    recursive=recursive)
         dims, npointsInSeries, dtype = metadata
-        SeriesLoader.__saveSeriesRdd(seriesBlocks, outputDirPath, dims, npointsInSeries, dtype, overwrite=overwrite)
+        self.__saveSeriesRdd(seriesBlocks, outputDirPath, dims, npointsInSeries, dtype, overwrite=overwrite)
 
     def fromMatLocal(self, dataPath, varName, keyFile=None):
         """Loads Series data stored in a Matlab .mat file.
@@ -743,8 +747,7 @@ class SeriesLoader(object):
 
         return rdd
 
-    @staticmethod
-    def loadConf(dataPath, confFilename='conf.json'):
+    def loadConf(self, dataPath, confFilename='conf.json'):
         """Returns a dict loaded from a json file.
 
         Looks for file named `conffile` in same directory as `dataPath`
@@ -754,7 +757,7 @@ class SeriesLoader(object):
         if not confFilename:
             return {}
 
-        reader = getFileReaderForPath(dataPath)()
+        reader = getFileReaderForPath(dataPath)(awsCredentialsOverride=self.awsCredentialsOverride)
         try:
             jsonBuf = reader.read(dataPath, filename=confFilename)
         except FileNotFoundError:
@@ -771,13 +774,13 @@ class SeriesLoader(object):
 
 
 def writeSeriesConfig(outputDirPath, nkeys, nvalues, keyType='int16', valueType='int16',
-                      confFilename="conf.json", overwrite=True):
+                      confFilename="conf.json", overwrite=True, awsCredentialsOverride=None):
     """Helper function to write out a conf.json file with required information to load Series binary data.
     """
     import json
     from thunder.rdds.fileio.writers import getFileWriterForPath
 
-    filewriterClass = getFileWriterForPath(outputDirPath)
+    filewriterClass = getFileWriterForPath(outputDirPath, awsCredentialsOverride=awsCredentialsOverride)
     # write configuration file
     # config JSON keys are lowercased "valuetype", "keytype", not valueType, keyType
     conf = {'input': outputDirPath,
