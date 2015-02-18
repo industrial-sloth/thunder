@@ -140,7 +140,7 @@ class SeriesLoader(object):
         -------
         BinaryLoadParameters instance
         """
-        params = SeriesLoader.loadConf(dataPath, confFilename=confFilename)
+        params = self.loadConf(dataPath, confFilename=confFilename)
 
         # filter dict to include only recognized field names:
         for k in params.keys():
