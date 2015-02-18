@@ -15,10 +15,18 @@ class ThunderContext():
     ----------
     `_sc` : SparkContext
         Spark context for Spark functionality
+
+    awsAccessKeyId: None, or string
+    awsSecretAccessKey: None, or string
+        Public and private keys for AWS services. Typically the credentials should be accessible
+        through any of several different configuration files, and so should not have to be set
+        on the ThunderContext. See setAWSCredentials().
     """
 
     def __init__(self, sparkcontext):
         self._sc = sparkcontext
+        self.awsAccessKeyId = None
+        self.awsSecretAccessKey = None
 
     @classmethod
     def start(cls, *args, **kwargs):
@@ -589,6 +597,28 @@ class ThunderContext():
             data = loader.fromNpyLocal(dataFilePath, keyFilePath)
 
         return data
+
+    def setAWSCredentials(self, awsAccessKeyId, awsSecretAccessKey):
+        """Manually set AWS access credentials to be used by Thunder.
+
+        This method is provided primarily for hosted environments that do not provide
+        filesystem access (e.g. Databricks Cloud). Typically AWS credentials can be set
+        and read from core-site.xml (for Hadoop input format readers, such as Series
+        binary files), ~/.boto or other boto credential file locations, or the environment
+        variables AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY. These credentials should
+        be configured automatically in clusters launched by the thunder-ec2 script, and
+        so this method should not have to be called.
+
+        Parameters
+        ----------
+        awsAccessKeyId: string AWS public key, usually starts with "AKIA"
+        awsSecretAccessKey: string AWS private key
+        """
+        self.awsAccessKeyId = awsAccessKeyId
+        self.awsSecretAccessKey = awsSecretAccessKey
+        self._sc._jsc.hadoopConfiguration().set("fs.s3n.awsAccessKeyId", awsAccessKeyId)
+        self._sc._jsc.hadoopConfiguration().set("fs.s3n.awsSecretAccessKey", awsSecretAccessKey)
+
 
 DEFAULT_EXTENSIONS = {
     "stack": "stack",

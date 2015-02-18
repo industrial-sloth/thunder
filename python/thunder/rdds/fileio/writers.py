@@ -68,8 +68,9 @@ class LocalFSParallelWriter(object):
 
 
 class _BotoS3Writer(_BotoS3Client):
-    def __init__(self):
-        super(_BotoS3Writer, self).__init__()
+    def __init__(self, awsAccessKeyIdOverride=None, awsSecretAccessKeyOverride=None):
+        super(_BotoS3Writer, self).__init__(awsAccessKeyIdOverride=awsAccessKeyIdOverride,
+                                            awsSecretAccessKeyOverride=awsSecretAccessKeyOverride)
 
         self._contextActive = False
         self._conn = None
@@ -81,7 +82,8 @@ class _BotoS3Writer(_BotoS3Client):
         Set up a boto s3 connection.
 
         """
-        conn = boto.connect_s3()
+        conn = boto.connect_s3(aws_access_key_id=self.awsAccessKeyIdOverride,
+                               aws_secret_access_key=self.awsSecretAccessKeyOverride)
         parsed = _BotoS3Client.parseS3Query(dataPath)
         bucketName = parsed[0]
         keyName = parsed[1]
@@ -108,8 +110,9 @@ class _BotoS3Writer(_BotoS3Client):
 
 
 class BotoS3ParallelWriter(_BotoS3Writer):
-    def __init__(self, dataPath, overwrite=False):
-        super(BotoS3ParallelWriter, self).__init__()
+    def __init__(self, dataPath, overwrite=False, awsAccessKeyIdOverride=None, awsSecretAccessKeyOverride=None):
+        super(BotoS3ParallelWriter, self).__init__(awsAccessKeyIdOverride=awsAccessKeyIdOverride,
+                                                   awsSecretAccessKeyOverride=awsSecretAccessKeyOverride)
         self._dataPath = dataPath
         self._overwrite = overwrite
 
@@ -124,7 +127,7 @@ class BotoS3ParallelWriter(_BotoS3Writer):
 
 
 class LocalFSFileWriter(object):
-    def __init__(self, dataPath, filename, overwrite=False):
+    def __init__(self, dataPath, filename, overwrite=False, **kwargs):
         self._dataPath = dataPath
         self._filename = filename
         self._absPath = os.path.join(urllib.url2pathname(urlparse.urlparse(dataPath).path), filename)
@@ -148,8 +151,10 @@ class LocalFSFileWriter(object):
 
 
 class BotoS3FileWriter(_BotoS3Writer):
-    def __init__(self, dataPath, filename, overwrite=False):
-        super(BotoS3FileWriter, self).__init__()
+    def __init__(self, dataPath, filename, overwrite=False, awsAccessKeyIdOverride=None,
+                 awsSecretAccessKeyOverride=None):
+        super(BotoS3FileWriter, self).__init__(awsAccessKeyIdOverride=awsAccessKeyIdOverride,
+                                               awsSecretAccessKeyOverride=awsSecretAccessKeyOverride)
         self._dataPath = dataPath
         self._filename = filename
         self._overwrite = overwrite
@@ -164,7 +169,7 @@ class BotoS3FileWriter(_BotoS3Writer):
 
 
 class LocalFSCollectedFileWriter(object):
-    def __init__(self, dataPath, overwrite=False):
+    def __init__(self, dataPath, overwrite=False, **kwargs):
         self._dataPath = dataPath
         self._absPath = urllib.url2pathname(urlparse.urlparse(dataPath).path)
         self._overwrite = overwrite
@@ -194,8 +199,9 @@ class LocalFSCollectedFileWriter(object):
 
 class BotoS3CollectedFileWriter(_BotoS3Writer):
     # todo: needs to check before writing if overwrite is True
-    def __init__(self, dataPath, overwrite=False):
-        super(BotoS3CollectedFileWriter, self).__init__()
+    def __init__(self, dataPath, overwrite=False, awsAccessKeyIdOverride=None, awsSecretAccessKeyOverride=None):
+        super(BotoS3CollectedFileWriter, self).__init__(awsAccessKeyIdOverride=awsAccessKeyIdOverride,
+                                                        awsSecretAccessKeyOverride=awsSecretAccessKeyOverride)
         self._dataPath = dataPath
         self._overwrite = overwrite
 
