@@ -25,8 +25,7 @@ class ThunderContext():
 
     def __init__(self, sparkcontext):
         self._sc = sparkcontext
-        self.awsAccessKeyId = None
-        self.awsSecretAccessKey = None
+        self.awsCredentials = None
 
     @classmethod
     def start(cls, *args, **kwargs):
@@ -614,8 +613,8 @@ class ThunderContext():
         awsAccessKeyId: string AWS public key, usually starts with "AKIA"
         awsSecretAccessKey: string AWS private key
         """
-        self.awsAccessKeyId = awsAccessKeyId
-        self.awsSecretAccessKey = awsSecretAccessKey
+        from thunder.utils.common import AWSCredentials
+        self.awsCredentials = AWSCredentials(awsAccessKeyId, awsSecretAccessKey)
         self._sc._jsc.hadoopConfiguration().set("fs.s3n.awsAccessKeyId", awsAccessKeyId)
         self._sc._jsc.hadoopConfiguration().set("fs.s3n.awsSecretAccessKey", awsSecretAccessKey)
 

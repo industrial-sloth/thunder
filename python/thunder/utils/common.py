@@ -190,3 +190,23 @@ def raiseErrorIfPathExists(path):
     if existing:
         raise ValueError("Path %s appears to already exist. Specify a new directory, or call " % path +
                          "with overwrite=True to overwrite.")
+
+
+class AWSCredentials(object):
+    __slots__ = ('awsAccessKeyId', 'awsSecretAccessKey')
+
+    def __init__(self, awsAccessKeyId=None, awsSecretAccessKey=None):
+        self.awsAccessKeyId = awsAccessKeyId
+        self.awsSecretAccessKey = awsSecretAccessKey
+
+    @staticmethod
+    def getCredentials(awsCredentials):
+        if awsCredentials:
+            return awsCredentials.awsAccessKeyId, awsCredentials.awsSecretAccessKey
+        else:
+            return None, None
+
+    @staticmethod
+    def getCredentialsAsDict(awsCredentials):
+        access, secret = AWSCredentials.getCredentials(awsCredentials)
+        return {"aws_access_key_id": access, "aws_secret_access_key": secret}
