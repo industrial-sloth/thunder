@@ -49,8 +49,8 @@ class Blocks(Data):
     """
     _metadata = Data._metadata + ['_dims', '_nimages']
 
-    def __init__(self, rdd, dims=None, nimages=None, dtype=None):
-        super(Blocks, self).__init__(rdd, dtype=dtype)
+    def __init__(self, rdd, dims=None, nimages=None, dtype=None, awsCredentials=None):
+        super(Blocks, self).__init__(rdd, dtype=dtype, awsCredentials=awsCredentials)
         self._dims = dims
         self._nimages = nimages
 

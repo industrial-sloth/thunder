@@ -15,8 +15,8 @@ class Images(Data):
 
     _metadata = Data._metadata + ['_dims']
 
-    def __init__(self, rdd, dims=None, nrecords=None, dtype=None):
-        super(Images, self).__init__(rdd, nrecords=nrecords, dtype=dtype)
+    def __init__(self, rdd, dims=None, nrecords=None, dtype=None, awsCredentials=None):
+        super(Images, self).__init__(rdd, nrecords=nrecords, dtype=dtype, awsCredentials=awsCredentials)
         if dims and not isinstance(dims, Dimensions):
             try:
                 dims = Dimensions.fromTuple(dims)

@@ -199,6 +199,12 @@ class AWSCredentials(object):
         self.awsAccessKeyId = awsAccessKeyId
         self.awsSecretAccessKey = awsSecretAccessKey
 
+    def __repr__(self):
+        def obfuscate(s):
+            return "None" if s is None else "<%d-char string>" % len(s)
+        return "AWSCredentials(accessKeyId: %s, secretAccessKey: %s)" % \
+               (obfuscate(self.awsAccessKeyId), obfuscate(self.awsSecretAccessKey))
+
     @staticmethod
     def getCredentials(awsCredentials):
         if awsCredentials:
