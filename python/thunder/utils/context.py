@@ -82,7 +82,7 @@ class ThunderContext():
         checkParams(inputFormat, ['text', 'binary'])
 
         from thunder.rdds.fileio.seriesloader import SeriesLoader
-        loader = SeriesLoader(self._sc, minPartitions=minPartitions)
+        loader = SeriesLoader(self._sc, minPartitions=minPartitions, awsCredentialsOverride=self.awsCredentials)
 
         if inputFormat.lower() == 'text':
             data = loader.fromText(dataPath, nkeys=nkeys)
@@ -171,7 +171,7 @@ class ThunderContext():
         checkParams(inputFormat, ['stack', 'png', 'tif', 'tif-stack'])
 
         from thunder.rdds.fileio.imagesloader import ImagesLoader
-        loader = ImagesLoader(self._sc)
+        loader = ImagesLoader(self._sc, awsCredentialsOverride=self.awsCredentials)
 
         if not ext:
             ext = DEFAULT_EXTENSIONS.get(inputFormat.lower(), None)
@@ -296,7 +296,7 @@ class ThunderContext():
 
         if shuffle:
             from thunder.rdds.fileio.imagesloader import ImagesLoader
-            loader = ImagesLoader(self._sc)
+            loader = ImagesLoader(self._sc, awsCredentialsOverride=self.awsCredentials)
             if inputFormat.lower() == 'stack':
                 images = loader.fromStack(dataPath, dims, dtype=dtype, ext=ext, startIdx=startIdx, stopIdx=stopIdx,
                                           recursive=recursive, nplanes=nplanes, npartitions=npartitions)
@@ -313,7 +313,7 @@ class ThunderContext():
             if npartitions is not None:
                 raise NotImplementedError("npartitions is not supported with shuffle=False")
 
-            loader = SeriesLoader(self._sc)
+            loader = SeriesLoader(self._sc, awsCredentialsOverride=self.awsCredentials)
             if inputFormat.lower() == 'stack':
                 return loader.fromStack(dataPath, dims, ext=ext, dtype=dtype, blockSize=blockSize,
                                         startIdx=startIdx, stopIdx=stopIdx, recursive=recursive)
@@ -442,7 +442,7 @@ class ThunderContext():
 
         if shuffle:
             from thunder.rdds.fileio.imagesloader import ImagesLoader
-            loader = ImagesLoader(self._sc)
+            loader = ImagesLoader(self._sc, awsCredentialsOverride=self.awsCredentials)
             if inputFormat.lower() == 'stack':
                 images = loader.fromStack(dataPath, dims, dtype=dtype, startIdx=startIdx, stopIdx=stopIdx,
                                           recursive=recursive, nplanes=nplanes, npartitions=npartitions)
@@ -457,7 +457,7 @@ class ThunderContext():
                 raise NotImplementedError("nplanes is not supported with shuffle=False")
             if npartitions is not None:
                 raise NotImplementedError("npartitions is not supported with shuffle=False")
-            loader = SeriesLoader(self._sc)
+            loader = SeriesLoader(self._sc, awsCredentialsOverride=self.awsCredentials)
             if inputFormat.lower() == 'stack':
                 loader.saveFromStack(dataPath, outputDirPath, dims, ext=ext, dtype=dtype,
                                      blockSize=blockSize, overwrite=overwrite, startIdx=startIdx,
@@ -586,7 +586,7 @@ class ThunderContext():
         checkParams(inputFormat, ['mat', 'npy'])
 
         from thunder.rdds.fileio.seriesloader import SeriesLoader
-        loader = SeriesLoader(self._sc, minPartitions=minPartitions)
+        loader = SeriesLoader(self._sc, minPartitions=minPartitions, awsCredentialsOverride=self.awsCredentials)
 
         if inputFormat.lower() == 'mat':
             if varName is None:
