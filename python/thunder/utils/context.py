@@ -469,7 +469,7 @@ class ThunderContext():
                              " ('stack' value for 'inputFormat' parameter)")
 
         if not overwrite:
-            raiseErrorIfPathExists(outputDirPath)
+            raiseErrorIfPathExists(outputDirPath, awsCredentialsOverride=self.awsCredentials)
             overwrite = True  # prevent additional downstream checks for this path
 
         if not ext:
