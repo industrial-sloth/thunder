@@ -590,7 +590,7 @@ class SeriesLoader(object):
     def __saveSeriesRdd(self, seriesBlocks, outputDirPath, dims, npointsInSeries, dtype, overwrite=False):
         if not overwrite:
             from thunder.utils.common import raiseErrorIfPathExists
-            raiseErrorIfPathExists(outputDirPath)
+            raiseErrorIfPathExists(outputDirPath, awsCredentialsOverride=self.awsCredentialsOverride)
             overwrite = True  # prevent additional downstream checks for this path
         writer = getParallelWriterForPath(outputDirPath)(outputDirPath, overwrite=overwrite,
                                                          awsCredentialsOverride=self.awsCredentialsOverride)
@@ -657,7 +657,7 @@ class SeriesLoader(object):
         """
         if not overwrite:
             from thunder.utils.common import raiseErrorIfPathExists
-            raiseErrorIfPathExists(outputDirPath)
+            raiseErrorIfPathExists(outputDirPath, awsCredentialsOverride=self.awsCredentialsOverride)
             overwrite = True  # prevent additional downstream checks for this path
 
         seriesBlocks, npointsInSeries, newDtype = \
@@ -706,7 +706,7 @@ class SeriesLoader(object):
         """
         if not overwrite:
             from thunder.utils.common import raiseErrorIfPathExists
-            raiseErrorIfPathExists(outputDirPath)
+            raiseErrorIfPathExists(outputDirPath, self.awsCredentialsOverride)
             overwrite = True  # prevent additional downstream checks for this path
 
         seriesBlocks, metadata = self._getSeriesBlocksFromMultiTif(dataPath, ext=ext, blockSize=blockSize,
